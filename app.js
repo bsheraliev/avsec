@@ -1,0 +1,692 @@
+/* ===========================================================================
+   AvSec — тренажёр авиационной безопасности. Движок: квиз по доменам
+   Приложения 17, XP/ранги, дневная цель, статистика, работа над ошибками,
+   сертификат. (Адаптировано из движка AvEng.)
+   =========================================================================== */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const app = $("#app");
+const SAVE_KEY = "avsec_game_v1";
+
+function defaultState() {
+  return {
+    xp: 0, totalCorrect: 0, streakBest: 0, soundOn: true, voiceOn: true, lang: "ru", org: "",
+    achievements: {}, mistakes: {}, catStats: {}, domainCorrect: {},
+    daily: { day: "", streak: 0, count: 0, goal: 20 }
+  };
+}
+function loadState() {
+  try { return Object.assign(defaultState(), JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); }
+  catch (e) { return defaultState(); }
+}
+let state = loadState();
+function save() {
+  localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  if (inTelegram) { try { TG.CloudStorage.setItem(SAVE_KEY, JSON.stringify(state), () => {}); } catch (e) {} }
+}
+
+/* ---------- Прогресс ---------- */
+function todayStr() { const d = new Date(); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+function markDaily() {
+  const t = todayStr();
+  if (state.daily.day !== t) {
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const ystr = y.getFullYear() + "-" + (y.getMonth() + 1) + "-" + y.getDate();
+    state.daily.streak = (state.daily.day === ystr) ? (state.daily.streak + 1) : 1;
+    state.daily.day = t; state.daily.count = 0;
+    if (state.daily.streak >= 3) unlock("day3");
+  }
+  state.daily.count++; save();
+}
+function recordQuiz(q, correct) {
+  const c = q.cat || "other";
+  if (!state.catStats[c]) state.catStats[c] = { correct: 0, total: 0 };
+  state.catStats[c].total++;
+  if (correct) { state.catStats[c].correct++; if (state.mistakes[q.q]) delete state.mistakes[q.q]; }
+  else state.mistakes[q.q] = c;
+}
+function mistakeCount() { return Object.keys(state.mistakes).length; }
+
+const CAT_NAMES = {
+  awareness: "Основы АБ и угрозы", access: "Пропуска и доступ", restricted: "Зоны ограниченного доступа",
+  screening: "Досмотр", prohibited: "Запрещённые предметы", suspicious: "Подозрительные предметы",
+  insider: "Инсайдер и соцынженерия", response: "Действия при угрозе", culture: "Культура безопасности",
+  cyber: "Киберигиена", service: "По службам аэропорта", other: "Прочее"
+};
+const MENU = [
+  { go: "lessons", icon: "📺", title: "Видеоуроки", sub: "Короткие ролики по процессам" },
+  { go: "quiz-awareness", icon: "ℹ️", title: "Основы АБ и угрозы", sub: "Что такое АБ, АНВ, зона ответственности" },
+  { go: "quiz-access", icon: "🪪", title: "Пропуска и доступ", sub: "Бейдж, проход «хвостом», сопровождение" },
+  { go: "quiz-restricted", icon: "🚧", title: "Зоны ограниченного доступа", sub: "Правила поведения в ЗОД" },
+  { go: "quiz-screening", icon: "🛂", title: "Досмотр", sub: "Зачем досматривают всех, что нельзя проносить" },
+  { go: "quiz-prohibited", icon: "🚫", title: "Запрещённые предметы", sub: "Оружие, ЖГА, опасные грузы" },
+  { go: "quiz-suspicious", icon: "🧳", title: "Подозрительные предметы", sub: "Бесхозный багаж: не трогать, сообщить" },
+  { go: "quiz-insider", icon: "🕵️", title: "Инсайдер и соцынженерия", sub: "Подозрительные просьбы, давление" },
+  { go: "quiz-response", icon: "🚨", title: "Действия при угрозе", sub: "Тревога, эвакуация, бомбовая угроза" },
+  { go: "quiz-culture", icon: "🤝", title: "Культура безопасности", sub: "АБ — дело каждого, конфиденциальность" },
+  { go: "quiz-cyber", icon: "🖥️", title: "Киберигиена", sub: "Пароли, фишинг, USB" },
+  { go: "quiz-service", icon: "🧑‍✈️", title: "По службам аэропорта", sub: "Перрон, регистрация, клининг, грузовая, ГСМ" },
+  { go: "exam", icon: "📝", title: "Экзамен", sub: "Случайный микс — 15 вопросов" },
+  { go: "blitz", icon: "⏱️", title: "Экзамен на время", sub: "15 вопросов · таймер 20 c" },
+  { go: "mistakes", icon: "🧯", title: "Работа над ошибками", sub: "" }
+];
+
+/* ───────── Управление доступностью плиток и объёмом вопросов ─────────
+   Активны первые WIP_AFTER плиток, остальные помечаются «на стадии разработки»
+   и по нажатию показывают тост вместо запуска.
+   В активных тестах показывается только доля QUIZ_KEEP вопросов категории
+   (остальные «придержаны» до подключения).
+   Чтобы подключить позже:
+     • полностью открыть тест: добавь его id (поле `go`) в LIVE_EXTRA;
+     • открыть больше плиток сразу: увеличь WIP_AFTER;
+     • вернуть все вопросы: поставь QUIZ_KEEP = 1. */
+const WIP_AFTER = 5;            // сколько плиток активно в начале меню
+const LIVE_EXTRA = [];          // id игр (go), всегда активных независимо от позиции
+const QUIZ_KEEP = 0.4;          // доля вопросов категории, доступная сейчас (0.4 = −60%)
+function isWip(go, idx) { return idx >= WIP_AFTER && LIVE_EXTRA.indexOf(go) < 0; }
+function trimPool(list) {        // оставить долю QUIZ_KEEP вопросов (минимум 1)
+  if (QUIZ_KEEP >= 1) return list;
+  const n = Math.max(1, Math.ceil(list.length * QUIZ_KEEP));
+  return list.slice(0, n);
+}
+
+function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function pick(arr, n) { return shuffle(arr).slice(0, n); }
+function rankFor(xp) { let r = DATA.ranks[0]; for (const x of DATA.ranks) if (xp >= x.xp) r = x; return r; }
+function nextRank(xp) { for (const x of DATA.ranks) if (xp < x.xp) return x; return null; }
+
+/* ---------- Звук (WebAudio, работает и в Telegram) ---------- */
+let _actx = null;
+function beep(ok) {
+  if (!state.soundOn) return;
+  try {
+    _actx = _actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (_actx.state === "suspended") _actx.resume();
+    const now = _actx.currentTime, o = _actx.createOscillator(), g = _actx.createGain();
+    o.connect(g); g.connect(_actx.destination);
+    if (ok) { o.type = "sine"; o.frequency.setValueAtTime(660, now); o.frequency.setValueAtTime(990, now + 0.09); }
+    else { o.type = "square"; o.frequency.setValueAtTime(220, now); o.frequency.setValueAtTime(150, now + 0.13); }
+    g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(0.16, now + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+    o.start(now); o.stop(now + 0.3);
+  } catch (e) {}
+}
+function toast(msg, cls = "") {
+  const t = document.createElement("div"); t.className = "toast " + cls; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.classList.add("show"), 10);
+  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2200);
+}
+function addXP(n) {
+  const before = rankFor(state.xp); state.xp += n; const after = rankFor(state.xp);
+  if (after.name !== before.name) { toast("Новый ранг: " + after.name + " " + after.icon, "rank"); tgHaptic("success"); }
+  if (state.xp >= 600) unlock("expert");
+  if (state.xp >= 900) unlock("audit");
+  save();
+}
+function unlock(id) {
+  if (state.achievements[id]) return;
+  const a = DATA.achievements.find(x => x.id === id); if (!a) return;
+  state.achievements[id] = true; save(); toast("Ачивка: " + a.name + " " + a.icon, "ach");
+}
+
+/* ---------- Главный экран ---------- */
+function renderHome() {
+  lessonStopSpeak();
+  const r = rankFor(state.xp), nx = nextRank(state.xp);
+  const prog = nx ? Math.round(((state.xp - r.xp) / (nx.xp - r.xp)) * 100) : 100;
+  tgBack(false);
+  const todayC = (state.daily.day === todayStr()) ? state.daily.count : 0;
+  app.innerHTML = `
+    <div class="langrow">
+      ${["ru", "tg", "en"].map(L => `<button class="langchip ${(state.lang || "ru") === L ? "on" : ""}" onclick="changeLang('${L}')">${LANG_NAMES[L]}</button>`).join("")}
+    </div>
+    <div class="brand">🛡️ <b>AvSec</b> <span>· ${t("авиационная безопасность")}</span></div>
+    <div class="rankcard">
+      <div class="rankicon">${r.icon}</div>
+      <div class="rankinfo">
+        <div class="rankname">${t(r.name)}</div>
+        <div class="ranksub">${t("Ранг АБ:")} ${t(r.sub)}</div>
+        <div class="bar"><div class="fill" style="width:${prog}%"></div></div>
+        <div class="xpline">${state.xp} XP ${nx ? `· ${t("до")} «${t(nx.name)}» ${nx.xp - state.xp} XP` : "· " + t("максимум!")}</div>
+      </div>
+    </div>
+    <div class="daily">
+      <span>🎯 ${t("Сегодня")} <b>${Math.min(todayC, state.daily.goal)}/${state.daily.goal}</b></span>
+      <div class="dbar"><div class="dfill" style="width:${Math.min(100, Math.round(todayC / state.daily.goal * 100))}%"></div></div>
+      <span>🔥 <b>${state.daily.streak}</b> ${t("дн.")}</span>
+    </div>
+    <div class="menu">
+      ${MENU.map((m, i) => tile(m.go, m.icon, t(m.title), m.go === "mistakes"
+        ? (mistakeCount() ? mistakeCount() + " " + t("на повторение") : t("ошибок пока нет")) : t(m.sub), isWip(m.go, i))).join("")}
+    </div>
+    <div class="row2">
+      <button class="ghost" onclick="renderAch()">${t("🏅 Ачивки")} (${Object.keys(state.achievements).length}/${DATA.achievements.length})</button>
+      <button class="ghost" onclick="renderStats()">📊 ${t("Статистика")}</button>
+    </div>
+    <button class="ghost fullrow" onclick="renderLeaderboard()">${t("🏆 Лидерборд")}</button>
+    <button class="ghost fullrow" onclick="renderCertificate()">${t("🎓 Сертификат о прохождении")}</button>
+    <button class="ghost fullrow" onclick="shareApp()">${t("📨 Поделиться с коллегой")}</button>
+    <button class="ghost fullrow" onclick="renderSettings()">${t("⚙️ Настройки")}</button>
+    <button class="ghost danger fullrow" onclick="resetAll()">${t("↺ Сброс прогресса")}</button>
+    <p class="disclaimer">${t("Учебный тренажёр на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.")}</p>
+    <p class="disclaimer">© 2026 Б.Б. Шералиев. ${t("Все права защищены. Копирование содержимого и кода без письменного разрешения автора запрещено.")} <a href="./TERMS.html" style="color:inherit;text-decoration:underline">${t("Условия")}</a></p>
+  `;
+}
+function tile(go, icon, title, sub, wip) {
+  if (wip) {
+    return `<button class="tile wip" onclick="wipToast()"><span class="wipbadge">🔧 ${t("в разработке")}</span><span class="ti">${icon}</span><span class="tt">${title}</span><span class="ts">${sub}</span></button>`;
+  }
+  return `<button class="tile" onclick="route('${go}')"><span class="ti">${icon}</span><span class="tt">${title}</span><span class="ts">${sub}</span></button>`;
+}
+function wipToast() { toast(t("Раздел на стадии разработки — скоро будет доступен"), "warn"); }
+function route(go) {
+  track("open/" + go);
+  if (go === "lessons") return renderLessons();
+  if (go === "exam") return startQuiz(pick(DATA.quiz, 15), "Экзамен", null);
+  if (go === "blitz") return startQuiz(pick(DATA.quiz, 15), "Экзамен на время", null, { timed: true, secs: 20 });
+  if (go === "mistakes") return startMistakes();
+  if (go.startsWith("quiz-")) {
+    const cat = go.slice(5);
+    return startQuiz(shuffle(trimPool(DATA.quiz.filter(q => q.cat === cat))), CAT_NAMES[cat] || "Тест", cat);
+  }
+}
+function topbar(title) {
+  tgBack(true);
+  return `<div class="topbar"><button class="back" onclick="renderHome()">${t("‹ Меню")}</button><span class="ttitle">${t(title)}</span><span class="xpchip">${state.xp} XP</span></div>`;
+}
+function changeLang(L) { state.lang = L; save(); renderHome(); }
+
+/* ===========================================================================
+   КВИЗ
+   =========================================================================== */
+let quiz = null, quizTimer = null;
+function startQuiz(questions, title, cat, opts = {}) {
+  if (!questions.length) { toast("Пока нет вопросов в этом разделе"); return; }
+  quiz = { qs: questions, i: 0, correct: 0, streak: 0, lives: 3, title, cat, timed: !!opts.timed, secs: opts.secs || 20, log: [] };
+  renderQuestion();
+}
+function locQ(q) {
+  const L = state.lang;
+  if (L && L !== "ru" && q.tr && q.tr[L]) {
+    const tt = q.tr[L];
+    return { q: tt.q || q.q, a: (tt.a && tt.a.length === 4) ? tt.a : q.a, why: tt.why || q.why };
+  }
+  return { q: q.q, a: q.a, why: q.why };
+}
+function renderQuestion() {
+  if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+  if (quiz.i >= quiz.qs.length || quiz.lives <= 0) return renderQuizResult();
+  const q = quiz.qs[quiz.i];
+  const lq = locQ(q);
+  const shown = shuffle(lq.a.map((t, idx) => ({ t, idx })));
+  app.innerHTML = `
+    ${topbar(quiz.title)}
+    <div class="hud">
+      <span>${t("Вопрос")} ${quiz.i + 1}/${quiz.qs.length}</span>
+      <span class="lives">${"❤️".repeat(quiz.lives)}${"🖤".repeat(3 - quiz.lives)}</span>
+      <span class="streak">🔥 ${quiz.streak}</span>
+    </div>
+    ${quiz.timed ? `<div class="tbar"><div class="tfill" id="tfill"></div></div>` : ""}
+    <div class="qcard">
+      <div class="qtext">${lq.q}</div>
+      <div class="opts">${shown.map(o => `<button class="opt" data-i="${o.idx}">${o.t}</button>`).join("")}</div>
+      <div class="feedback" id="fb"></div>
+    </div>`;
+  $$(".opt").forEach(b => b.addEventListener("click", () => answer(parseInt(b.dataset.i), b)));
+  if (quiz.timed) {
+    let left = quiz.secs * 1000;
+    quizTimer = setInterval(() => {
+      const bar = $("#tfill"); if (!bar) { clearInterval(quizTimer); quizTimer = null; return; }
+      left -= 100; bar.style.width = Math.max(0, left / (quiz.secs * 1000) * 100) + "%";
+      if (left <= 0) { clearInterval(quizTimer); quizTimer = null; if (!$("#fb").dataset.locked) answer(-1, null); }
+    }, 100);
+  }
+}
+function answer(chosen, btn) {
+  if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+  const q = quiz.qs[quiz.i];
+  const lq = locQ(q);
+  if ($("#fb").dataset.locked) return;
+  $("#fb").dataset.locked = "1";
+  const correct = chosen === q.correct;
+  tgHaptic(correct ? "success" : "error"); beep(correct);
+  quiz.log.push({ cat: q.cat || "other", ok: correct });
+  recordQuiz(q, correct); markDaily();
+  $$(".opt").forEach(b => { const i = parseInt(b.dataset.i); b.disabled = true; if (i === q.correct) b.classList.add("right"); else if (b === btn) b.classList.add("wrong"); });
+  if (correct) {
+    quiz.correct++; quiz.streak++; state.totalCorrect++;
+    state.streakBest = Math.max(state.streakBest, quiz.streak);
+    unlock("first");
+    if (quiz.streak >= 5) unlock("streak5");
+    if (quiz.streak >= 10) unlock("streak10");
+    if (q.cat === "screening") { state.domainCorrect.screening = (state.domainCorrect.screening || 0) + 1; if (state.domainCorrect.screening >= 20) unlock("screen20"); }
+    const gain = 10 + Math.min(quiz.streak, 10); addXP(gain);
+    $("#fb").innerHTML = `<div class="fb ok">✅ ${t("Верно")} +${gain} XP</div><div class="why">${lq.why}</div><div class="src">📄 ${q.src}</div>`;
+  } else {
+    quiz.streak = 0; quiz.lives--;
+    $("#fb").innerHTML = `<div class="fb no">❌ ${t("Неверно. Правильно:")} «${lq.a[q.correct]}»</div><div class="why">${lq.why}</div><div class="src">📄 ${q.src}</div>`;
+  }
+  $("#fb").innerHTML += `<button class="next" id="next">${quiz.i + 1 >= quiz.qs.length || quiz.lives <= 0 ? t("Итог →") : t("Дальше →")}</button>`;
+  $("#next").addEventListener("click", () => { quiz.i++; renderQuestion(); });
+  save();
+}
+function resultBreakdown() {
+  const by = {};
+  quiz.log.forEach(e => { (by[e.cat] = by[e.cat] || { c: 0, t: 0 }), by[e.cat].t++; if (e.ok) by[e.cat].c++; });
+  const cats = Object.keys(by); if (cats.length <= 1) return "";
+  const rows = cats.map(c => {
+    const p = Math.round(by[c].c / by[c].t * 100), cls = p >= 70 ? "ok" : "no";
+    return `<div class="brrow"><span class="brname">${t(CAT_NAMES[c] || c)}</span><span class="brbar"><span class="brfill ${cls}" style="width:${p}%"></span></span><span class="brval">${by[c].c}/${by[c].t}</span></div>`;
+  }).join("");
+  return `<div class="breakdown"><div class="brtitle">${t("По темам")}</div>${rows}</div>`;
+}
+function renderQuizResult() {
+  const pct = Math.round((quiz.correct / quiz.qs.length) * 100);
+  const failed = quiz.lives <= 0;
+  track("done/" + (quiz.cat || quiz.title || "quiz"));
+  const vc = (!failed && pct >= 70) ? "ok" : "no";
+  const verdict = failed ? t("Жизни закончились — потренируйтесь ещё")
+    : pct >= 90 ? t("Отлично! Уверенный уровень по АБ")
+    : pct >= 70 ? t("Хорошо — рабочий минимум") : t("Нужно повторить материал");
+  if (!failed && pct >= 90 && quiz.cat === null) unlock("exam");
+  const retry = quiz.cat === "review" ? "startMistakes()" : quiz.timed ? "route('blitz')" : quiz.cat ? `route('quiz-${quiz.cat}')` : "route('exam')";
+  app.innerHTML = `
+    ${topbar(quiz.title)}
+    <div class="result">
+      <div class="bigpct ${vc}">${pct}%</div>
+      <div class="verdict ${vc}">${verdict}</div>
+      <div class="rstats">${t("Правильно")} ${quiz.correct} ${t("из")} ${quiz.qs.length} · ${t("Лучшая серия")} 🔥 ${state.streakBest}</div>
+      ${resultBreakdown()}
+      <div class="row2">
+        <button class="primary" onclick="shareResult(${pct}, ${quiz.correct}, ${quiz.qs.length})">${t("📲 Поделиться")}</button>
+        <button class="ghost" onclick="${retry}">${t("↻ Ещё раз")}</button>
+      </div>
+      <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>
+    </div>`;
+  if (vc === "ok" && !failed) confetti();
+}
+
+/* ---------- Работа над ошибками ---------- */
+function startMistakes() {
+  const qs = DATA.quiz.filter(q => state.mistakes[q.q]);
+  if (!qs.length) { toast("Ошибок нет — отличная работа!"); return; }
+  startQuiz(shuffle(qs), "Работа над ошибками", "review");
+}
+
+/* ---------- Ачивки / Статистика ---------- */
+function renderAch() {
+  app.innerHTML = `${topbar("Ачивки")}<div class="achlist">${DATA.achievements.map(a => {
+    const got = state.achievements[a.id];
+    return `<div class="achitem ${got ? "got" : "locked"}"><span class="achicon">${got ? a.icon : "🔒"}</span><span class="achinfo"><b>${a.name}</b><small>${a.desc}</small></span></div>`;
+  }).join("")}</div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+}
+function renderStats() {
+  const cats = Object.keys(state.catStats);
+  const rows = cats.length ? cats.map(c => {
+    const s = state.catStats[c], p = s.total ? Math.round(s.correct / s.total * 100) : 0;
+    return `<div class="brrow"><span class="brname">${CAT_NAMES[c] || c}</span><span class="brbar"><span class="brfill ${p >= 70 ? "ok" : "no"}" style="width:${p}%"></span></span><span class="brval">${s.correct}/${s.total}</span></div>`;
+  }).join("") : `<div class="qsub">Пока нет данных — пройдите несколько вопросов.</div>`;
+  app.innerHTML = `${topbar("Статистика")}
+    <div class="qcard">
+      <div class="row2" style="margin-bottom:14px">
+        <div class="bigstat"><b>${state.xp}</b><span>XP всего</span></div>
+        <div class="bigstat"><b>${state.totalCorrect}</b><span>верных ответов</span></div>
+      </div>
+      <div class="breakdown">${rows}</div>
+    </div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+}
+
+/* ---------- Лидерборд (Google Apps Script — публичный URL, не секрет) ---------- */
+const LEADERBOARD = { scriptUrl: "https://script.google.com/macros/s/AKfycbxopx5gos9syKpagZCUtCuabEv_PyRQnsxYJMMy9XzxEG_zZ_O9tizjwi-AO5zcxU7X/exec" };
+let lbMode = "players";
+
+/* ---------- Аналитика использования (GoatCounter — бесплатно, без cookies) ----------
+   Считает: визиты (просмотры) + события внутри игры (какие модули открывают, прохождения).
+   Подключение: зарегистрируй бесплатный код на https://www.goatcounter.com/ (например "avsec",
+   адрес будет https://avsec.goatcounter.com), и впиши его сюда. Пусто = аналитика выключена. */
+const ANALYTICS = { goatcounter: "avsec" };
+function plat() { return (typeof inTelegram !== "undefined" && inTelegram) ? "tg" : "web"; }
+function initAnalytics() {
+  if (!ANALYTICS.goatcounter || window.goatcounter) return;
+  window.goatcounter = { no_onload: true };      // просмотр шлём сами — с меткой платформы (tg/web)
+  const s = document.createElement("script");
+  s.async = true; s.src = "//gc.zgo.at/count.js";
+  s.setAttribute("data-goatcounter", "https://" + ANALYTICS.goatcounter + ".goatcounter.com/count");
+  s.onload = function () { try { goatcounter.count({ path: plat() + "/visit", title: "visit-" + plat() }); } catch (e) {} };
+  document.head.appendChild(s);
+}
+function track(path) {                            // событие внутри игры (не просмотр страницы), с меткой платформы
+  try { if (window.goatcounter && goatcounter.count) goatcounter.count({ path: plat() + "/" + String(path), event: true }); } catch (e) {}
+}
+function trackSource() {                          // откуда пришёл: по приглашению (startapp=inv) и т.п.
+  try {
+    var sp = inTelegram && TG.initDataUnsafe && TG.initDataUnsafe.start_param;
+    if (!sp) return;
+    var src = String(sp).replace(/[^a-z0-9_-]/gi, "").slice(0, 24);
+    if (src) track("src/" + src);
+  } catch (e) {}
+}
+
+function lbReady() { return !!LEADERBOARD.scriptUrl; }
+function lbName() {
+  try { if (inTelegram && TG.initDataUnsafe && TG.initDataUnsafe.user) { const u = TG.initDataUnsafe.user; return ((u.first_name || "") + (u.last_name ? " " + u.last_name : "")) || u.username || "TG"; } } catch (e) {}
+  return "Гость";
+}
+function lbSubmitName() { const n = lbName(); return state.org ? (n + " ▪ " + state.org).slice(0, 48) : n; }
+function setLbMode(m) { lbMode = m; renderLeaderboard(); }
+function renderLeaderboard() {
+  if (!lbReady()) {
+    app.innerHTML = `${topbar("Лидерборд")}
+      <div class="qcard"><div class="qtext">🏆 Общий лидерборд ещё не подключён.</div>
+      <div class="why">Нужен бесплатный «бэкенд» — Google Таблица + Apps Script Web App (код в <b>backend/leaderboard.gs</b>). Создаёте Таблицу → вставляете скрипт → Deploy as Web app (Anyone) → вписываете URL в <b>LEADERBOARD.scriptUrl</b>. URL публичный, не секрет.</div>
+      <button class="next" onclick="renderHome()">В меню</button></div>`;
+    return;
+  }
+  app.innerHTML = `${topbar("Лидерборд")}<div class="qcard"><div class="qsub">Загрузка…</div></div>`;
+  fetch(LEADERBOARD.scriptUrl + "?action=top").then(r => r.json()).then(rows => {
+    rows = (Array.isArray(rows) ? rows : []).map(x => { const p = String(x.username || "—").split(" ▪ "); return { name: p[0].replace(/</g, ""), org: (p[1] || "").replace(/</g, ""), score: +x.score || 0 }; });
+    const toggle = `<div class="lbtoggle"><button class="lbtab ${lbMode === "players" ? "on" : ""}" onclick="setLbMode('players')">👤 Игроки</button><button class="lbtab ${lbMode === "teams" ? "on" : ""}" onclick="setLbMode('teams')">👥 Команды</button></div>`;
+    let list;
+    if (lbMode === "teams") {
+      const teams = {}; rows.forEach(r => { if (!r.org) return; if (!teams[r.org] || r.score > teams[r.org]) teams[r.org] = r.score; });
+      const arr = Object.keys(teams).map(o => ({ org: o, score: teams[o] })).sort((a, b) => b.score - a.score).slice(0, 30);
+      list = arr.map((x, i) => `<div class="lbrow"><span class="lbpos">${i + 1}</span><span class="lbname">${x.org}</span><span class="lbscore">${x.score} XP</span></div>`).join("") || `<div class="qsub">Пока нет команд. Укажите аэропорт/организацию в «Настройках».</div>`;
+    } else {
+      list = rows.sort((a, b) => b.score - a.score).slice(0, 30).map((x, i) => `<div class="lbrow"><span class="lbpos">${i + 1}</span><span class="lbname">${x.name}${x.org ? `<small class="lborg">${x.org}</small>` : ""}</span><span class="lbscore">${x.score} XP</span></div>`).join("") || `<div class="qsub">Пока пусто — будьте первым!</div>`;
+    }
+    app.innerHTML = `${topbar("Лидерборд")}${toggle}<div class="qcard"><div class="qsub">Топ-30</div>${list}</div>
+      <button class="next" onclick="submitScore()">📤 Отправить мой результат (${state.xp} XP)</button>
+      <button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+  }).catch(() => { app.innerHTML = `${topbar("Лидерборд")}<div class="qcard"><div class="qtext">Не удалось загрузить лидерборд.</div><button class="next" onclick="renderHome()">В меню</button></div>`; });
+}
+function submitScore() {
+  if (!lbReady()) return;
+  fetch(LEADERBOARD.scriptUrl, { method: "POST", body: JSON.stringify({ name: lbSubmitName(), score: state.xp }) })
+    .then(r => r.json()).then(() => { toast("Результат отправлен 🏆"); renderLeaderboard(); }).catch(() => toast("Не удалось отправить"));
+}
+
+/* ---------- Поделиться приложением с коллегой ---------- */
+const APP_LINK = "https://bsheraliev.github.io/avsec/";
+const BOT_LINK = "https://t.me/AvSecApp_bot";
+function shareApp() {
+  track("share/invite");
+  const text = "AvSec — тренажёр по авиационной безопасности 🛡️ Проверь свои знания: " + BOT_LINK;
+  if (inTelegram) { try { TG.openTelegramLink("https://t.me/share/url?url=" + encodeURIComponent(BOT_LINK + "?startapp=inv") + "&text=" + encodeURIComponent("AvSec — тренажёр по авиационной безопасности 🛡️ Проверь свои знания!")); return; } catch (e) {} }
+  if (navigator.share) { navigator.share({ title: "AvSec", text: "AvSec — тренажёр по авиационной безопасности 🛡️", url: APP_LINK }).catch(() => {}); return; }
+  if (navigator.clipboard) { navigator.clipboard.writeText(APP_LINK).then(() => toast("Ссылка скопирована")).catch(() => toast("Ссылка: " + APP_LINK)); }
+  else toast("Ссылка: " + APP_LINK);
+}
+
+/* ===========================================================================
+   ВИДЕОУРОКИ — самовоспроизводящиеся анимированные ролики по процессам
+   =========================================================================== */
+const LESSONS = [
+  { icon: "🧳", title: "Подозрительный предмет", cat: "suspicious", voiced: true, scenes: [
+    { e: "⚠️", role: "amber", step: "Ситуация", cap: "Обнаружен бесхозный предмет", why: "Сумка или пакет без владельца рядом с людьми." },
+    { e: "✋", role: "red", step: "Шаг 1 из 4", cap: "Не трогать и не перемещать", why: "Не открывайте, не сдвигайте и не накрывайте предмет." },
+    { e: "↔️", role: "amber", step: "Шаг 2 из 4", cap: "Отвести людей и оградить зону", why: "Уведите людей на безопасное расстояние." },
+    { e: "📵", role: "amber", step: "Шаг 3 из 4", cap: "Не пользоваться связью рядом", why: "Сигнал рации или телефона может сработать как детонатор." },
+    { e: "🛡️", role: "green", step: "Шаг 4 из 4", cap: "Сообщить службе безопасности", why: "Сообщите о находке и действуйте по их указаниям." }
+  ]},
+  { icon: "🚪", title: "Проход «хвостом»", cat: "access", scenes: [
+    { e: "👀", role: "amber", step: "Ситуация", cap: "Кто-то идёт следом к служебной двери", why: "Незнакомец пытается пройти «на хвосте» за вами." },
+    { e: "🪪", role: "blue", step: "Правило", cap: "Один проход — один пропуск", why: "Каждый проходит по своему действующему пропуску." },
+    { e: "✋", role: "red", step: "Шаг 1 из 3", cap: "Не пропускать следом за собой", why: "Вежливо, но твёрдо не давайте пройти без пропуска." },
+    { e: "🔒", role: "amber", step: "Шаг 2 из 3", cap: "Убедиться, что дверь закрылась", why: "Не оставляйте дверь открытой или подпёртой." },
+    { e: "📞", role: "green", step: "Шаг 3 из 3", cap: "Сообщить о попытке прохода", why: "Сообщите службе безопасности о постороннем." }
+  ]},
+  { icon: "🚨", title: "Тревога и эвакуация", cat: "response", scenes: [
+    { e: "🔔", role: "red", step: "Сигнал", cap: "Объявлена тревога или эвакуация", why: "Звучит сигнал или поступила команда покинуть здание." },
+    { e: "🧭", role: "amber", step: "Шаг 1 из 4", cap: "Спокойно идти к выходу по указателям", why: "Без паники, по ближайшему безопасному маршруту." },
+    { e: "🎒", role: "red", step: "Шаг 2 из 4", cap: "Не возвращаться за вещами", why: "Личные вещи не стоят риска для жизни." },
+    { e: "🤝", role: "blue", step: "Шаг 3 из 4", cap: "Помочь тем, кому трудно", why: "Подскажите дорогу, поддержите растерявшихся." },
+    { e: "🧯", role: "green", step: "Шаг 4 из 4", cap: "Выполнять команды служб", why: "Слушайте указания службы безопасности и персонала." }
+  ]},
+  { icon: "🕵️", title: "Подозрительная просьба", cat: "insider", scenes: [
+    { e: "🗣️", role: "amber", step: "Ситуация", cap: "Просят пронести предмет или дать пропуск", why: "Даже знакомый или «начальник» может быть прикрытием." },
+    { e: "🚫", role: "red", step: "Шаг 1 из 3", cap: "Не выполнять подозрительную просьбу", why: "Не проносите вещи и не передавайте пропуск." },
+    { e: "💬", role: "amber", step: "Шаг 2 из 3", cap: "Не поддаваться на давление и уговоры", why: "Обещание денег или срочность — повод насторожиться." },
+    { e: "📞", role: "green", step: "Шаг 3 из 3", cap: "Сообщить о просьбе", why: "Расскажите о случившемся службе безопасности." }
+  ]},
+  { icon: "🛂", title: "Досмотр персонала", cat: "screening", scenes: [
+    { e: "🛂", role: "blue", step: "Правило", cap: "Досмотр проходят все, включая персонал", why: "Служебный вход в стерильную зону — через досмотр." },
+    { e: "🚫", role: "red", step: "Шаг 1 из 3", cap: "Не проносить запрещённые предметы", why: "Правила одинаковы для сотрудников и пассажиров." },
+    { e: "🙅", role: "amber", step: "Шаг 2 из 3", cap: "Не помогать обойти досмотр", why: "Нельзя проносить вещи для других «в обход»." },
+    { e: "✅", role: "green", step: "Шаг 3 из 3", cap: "Проходить спокойно и по правилам", why: "Выполняйте требования сотрудника досмотра." }
+  ]},
+  { icon: "🛫", title: "Доступ на перрон", cat: "access", scenes: [
+    { e: "🦺", role: "blue", step: "Правило", cap: "На перрон — только в жилете и с пропуском", why: "Светоотражающий жилет и бейдж на видном месте." },
+    { e: "🚗", role: "amber", step: "Шаг 1 из 3", cap: "Спецтранспорт — только с допуском", why: "Не пропускайте машины без пропуска на перрон." },
+    { e: "👀", role: "red", step: "Шаг 2 из 3", cap: "Заметили постороннего у самолёта", why: "Человек без жилета и пропуска рядом с воздушным судном." },
+    { e: "📞", role: "green", step: "Шаг 3 из 3", cap: "Не подходить, сообщить охране", why: "Держитесь на расстоянии и вызовите службу безопасности." }
+  ]},
+  { icon: "📦", title: "Груз и багаж", cat: "service", scenes: [
+    { e: "📦", role: "blue", step: "Правило", cap: "Груз — по документам и через досмотр", why: "Принимайте груз только с документами и проверкой." },
+    { e: "🧳", role: "red", step: "Шаг 1 из 3", cap: "Бесхозное место багажа", why: "Не вскрывать и не перемещать — сразу сообщить." },
+    { e: "🔁", role: "amber", step: "Шаг 2 из 3", cap: "Защитить досмотренный багаж от подмены", why: "Никто посторонний не должен подходить к багажу." },
+    { e: "📞", role: "green", step: "Шаг 3 из 3", cap: "Подозрительный груз — доложить", why: "Странный запах, протечка или нет документов — сообщите." }
+  ]},
+  { icon: "🖥️", title: "Кибергигиена", cat: "cyber", scenes: [
+    { e: "🔑", role: "blue", step: "Правило", cap: "Надёжный пароль и не передавать его", why: "Длинный пароль, нигде не записан, известен только вам." },
+    { e: "🎣", role: "red", step: "Шаг 1 из 3", cap: "Не открывать подозрительные письма", why: "Не переходите по ссылкам и вложениям от незнакомцев." },
+    { e: "🔌", role: "amber", step: "Шаг 2 из 3", cap: "Не вставлять чужие USB-носители", why: "Найденная флешка может заразить рабочую систему." },
+    { e: "🔒", role: "green", step: "Шаг 3 из 3", cap: "Блокировать компьютер, отходя", why: "И сообщать об инцидентах в ИТ или службу безопасности." }
+  ]}
+];
+function renderLessons() {
+  app.innerHTML = `${topbar("Видеоуроки")}
+    <div class="lesslist">${LESSONS.map((l, idx) => `<button class="lesscard" onclick="renderLesson(${idx})"><span class="lessico">${l.icon}</span><span class="lessmeta"><b>${t(l.title)}</b><small>${l.scenes.length} ${t("сцен · видеоурок")}</small></span><span class="lessplay">▶</span></button>`).join("")}</div>
+    <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
+}
+let lessonTimer = null, lessonIdx = 0, lessonOn = true, lessonId = 0;
+function renderLesson(id) {
+  lessonId = id; lessonIdx = 0; lessonOn = true;
+  const L = LESSONS[id];
+  app.innerHTML = `${topbar(L.title)}
+    <div class="lstage">
+      <div class="ltag">📺 ${t("Видеоурок")}</div>
+      <div class="lbody" id="lbody"></div>
+      <div class="ldots" id="ldots">${L.scenes.map(() => `<span class="ldot"></span>`).join("")}</div>
+      <div class="lprog"><div class="lbar" id="lbar"></div></div>
+    </div>
+    <div class="lctrls">
+      <button class="ghost" id="lpp" onclick="lessonToggle()">⏸ ${t("Пауза")}</button>
+      <button class="ghost" onclick="lessonRestart()">↻ ${t("Сначала")}</button>
+      <button class="ghost" id="lvoice" onclick="lessonVoiceToggle()">${state.voiceOn ? "🔊" : "🔇"} ${t("Голос")}</button>
+    </div>
+    <button class="next" onclick="route('quiz-${L.cat}')">📝 ${t("Пройти тест по теме")}</button>
+    <button class="ghost fullrow" onclick="renderLessons()">${t("‹ Видеоуроки")}</button>`;
+  lessonRender(); lessonStart();
+}
+let _lessonAudio = null;
+function lessonRender() {
+  const L = LESSONS[lessonId], s = L.scenes[lessonIdx], body = $("#lbody");
+  if (!body) { if (lessonTimer) { clearInterval(lessonTimer); lessonTimer = null; } lessonStopSpeak(); return; }
+  body.innerHTML = `<div class="lico role-${s.role}">${s.e}</div><div class="lstep">${t(s.step)}</div><div class="lcap">${t(s.cap)}</div><div class="lwhy">${t(s.why)}</div>`;
+  $$(".ldot").forEach((d, k) => { d.className = "ldot" + (k <= lessonIdx ? " on" : ""); });
+  const bar = $("#lbar"); if (bar) bar.style.width = Math.round((lessonIdx + 1) / L.scenes.length * 100) + "%";
+  if (lessonVoiced()) lessonPlayClip(lessonId, lessonIdx);
+  else lessonSpeak(t(s.cap) + ". " + t(s.why));
+}
+/* Урок с записанным голосом — только если voiced, звук вкл, язык рус и есть Audio */
+function lessonVoiced() { return !!(LESSONS[lessonId] && LESSONS[lessonId].voiced && state.voiceOn && state.lang === "ru" && ("Audio" in window)); }
+function lessonPlayClip(id, idx) {
+  lessonStopSpeak();
+  const s = LESSONS[id].scenes[idx];
+  const fb = () => { lessonSpeak(t(s.cap) + ". " + t(s.why)); setTimeout(() => { if (lessonOn && $("#lbody") && lessonIdx === idx) lessonStep(); }, 5000); };
+  try {
+    const a = new Audio("./audio/lesson-" + id + "-" + idx + ".mp3");
+    _lessonAudio = a;
+    a.onended = () => { if (lessonOn && _lessonAudio === a && $("#lbody")) lessonStep(); };
+    a.onerror = fb;
+    a.play().catch(fb);
+  } catch (e) { fb(); }
+}
+function lessonSpeak(text) {
+  if (!state.voiceOn || !("speechSynthesis" in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = state.lang === "en" ? "en-US" : "ru-RU"; u.rate = 0.98; speechSynthesis.speak(u); } catch (e) {}
+}
+function lessonStopSpeak() {
+  try { if ("speechSynthesis" in window) speechSynthesis.cancel(); } catch (e) {}
+  try { if (_lessonAudio) { _lessonAudio.onended = null; _lessonAudio.pause(); _lessonAudio = null; } } catch (e) {}
+}
+function lessonVoiceToggle() {
+  state.voiceOn = !state.voiceOn; save();
+  const b = $("#lvoice"); if (b) b.innerHTML = (state.voiceOn ? "🔊 " : "🔇 ") + t("Голос");
+  if (!state.voiceOn) lessonStopSpeak();
+  else if (lessonVoiced()) lessonPlayClip(lessonId, lessonIdx);
+  else { const s = LESSONS[lessonId].scenes[lessonIdx]; lessonSpeak(t(s.cap) + ". " + t(s.why)); }
+}
+function lessonStep() {
+  if (!$("#lbody")) { if (lessonTimer) { clearInterval(lessonTimer); lessonTimer = null; } lessonStopSpeak(); return; }
+  const L = LESSONS[lessonId];
+  if (lessonIdx < L.scenes.length - 1) { lessonIdx++; lessonRender(); } else lessonStop(true);
+}
+function lessonStart() {
+  lessonOn = true; const b = $("#lpp"); if (b) b.innerHTML = "⏸ " + t("Пауза");
+  if (lessonTimer) { clearInterval(lessonTimer); lessonTimer = null; }
+  if (!lessonVoiced()) lessonTimer = setInterval(lessonStep, 3800);
+}
+function lessonStop(end) { lessonOn = false; if (lessonTimer) { clearInterval(lessonTimer); lessonTimer = null; } lessonStopSpeak(); const b = $("#lpp"); if (b) b.innerHTML = "▶ " + (end ? t("Повтор") : t("Дальше →")); }
+function lessonToggle() {
+  if (lessonOn) { lessonStop(false); return; }
+  lessonOn = true; const b = $("#lpp"); if (b) b.innerHTML = "⏸ " + t("Пауза");
+  const L = LESSONS[lessonId];
+  if (lessonIdx >= L.scenes.length - 1) { lessonIdx = 0; lessonRender(); lessonStart(); return; }
+  if (lessonVoiced()) lessonPlayClip(lessonId, lessonIdx);
+  else { const s = L.scenes[lessonIdx]; lessonSpeak(t(s.cap) + ". " + t(s.why)); if (lessonTimer) clearInterval(lessonTimer); lessonTimer = setInterval(lessonStep, 3800); }
+}
+function lessonRestart() { lessonOn = true; if (lessonTimer) { clearInterval(lessonTimer); lessonTimer = null; } lessonStopSpeak(); lessonIdx = 0; lessonRender(); lessonStart(); }
+
+/* ---------- Шаринг результатом-картинкой ---------- */
+function makeShareCanvas(pct, correct, total) {
+  const S = 1080, c = document.createElement("canvas"); c.width = S; c.height = S;
+  const ctx = c.getContext("2d"), cx = S / 2;
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  const bg = ctx.createLinearGradient(0, 0, S, S); bg.addColorStop(0, "#06121a"); bg.addColorStop(.5, "#0b1f2a"); bg.addColorStop(1, "#0e2632"); ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S);
+  const p = 56; ctx.lineWidth = 3; ctx.strokeStyle = "#27e0a0"; rr(p, p, S - p * 2, S - p * 2, 40); ctx.stroke();
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#46c2ff"; ctx.font = "120px 'Segoe UI Emoji', system-ui, sans-serif"; ctx.fillText("🛡️", cx, 250);
+  ctx.fillStyle = "#e8f4f8"; ctx.font = "800 64px system-ui, sans-serif"; ctx.fillText("AvSec", cx, 330);
+  ctx.fillStyle = "#8fb3c2"; ctx.font = "28px system-ui, sans-serif"; ctx.fillText("Авиационная безопасность · ICAO Прил.17", cx, 375);
+  ctx.fillStyle = pct >= 70 ? "#27e0a0" : "#ffc14d"; ctx.font = "800 220px system-ui, sans-serif"; ctx.fillText(pct + "%", cx, 620);
+  ctx.fillStyle = "#e8f4f8"; ctx.font = "600 40px system-ui, sans-serif"; ctx.fillText("Правильно " + correct + " из " + total, cx, 695);
+  ctx.fillStyle = "#27e0a0"; ctx.font = "700 38px system-ui, sans-serif"; ctx.fillText(rankFor(state.xp).name, cx, 820);
+  ctx.fillStyle = "#8fb3c2"; ctx.font = "30px system-ui, sans-serif"; ctx.fillText("Тренажёр по авиабезопасности", cx, 975);
+  return c;
+}
+async function shareResult(pct, correct, total) {
+  const c = makeShareCanvas(pct, correct, total);
+  const txt = "Мой результат в AvSec — тренажёре по авиационной безопасности 🛡️ " + pct + "%";
+  try {
+    if (navigator.canShare) {
+      const blob = await new Promise(r => c.toBlob(r, "image/png"));
+      const file = new File([blob], "AvSec-result.png", { type: "image/png" });
+      if (navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text: txt }); return; }
+    }
+  } catch (e) {}
+  try { const a = document.createElement("a"); a.download = "AvSec-result.png"; a.href = c.toDataURL("image/png"); document.body.appendChild(a); a.click(); document.body.removeChild(a); toast("Картинка сохранена"); } catch (e) {}
+}
+function confetti() {
+  try {
+    const colors = ["#27e0a0", "#46c2ff", "#ffc14d", "#ff6b6b", "#e8f4f8"];
+    const wrap = document.createElement("div"); wrap.className = "confetti";
+    for (let i = 0; i < 30; i++) { const s = document.createElement("i"); s.style.left = (Math.random() * 100) + "vw"; s.style.background = colors[i % colors.length]; s.style.animationDelay = (Math.random() * 0.35) + "s"; s.style.animationDuration = (1.6 + Math.random() * 0.9) + "s"; wrap.appendChild(s); }
+    document.body.appendChild(wrap); setTimeout(() => wrap.remove(), 2600);
+  } catch (e) {}
+}
+
+/* ---------- Сертификат ---------- */
+function renderCertificate() {
+  const rank = rankFor(state.xp), xp = state.xp || 0, correct = state.totalCorrect || 0, streak = (state.daily && state.daily.streak) || 0;
+  const d = new Date(), pad = n => String(n).padStart(2, "0");
+  const dateStr = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
+  app.innerHTML = `${topbar("Сертификат")}
+    <div class="cert-wrap"><div class="cert-card">
+      <div class="cert-emblem">🛡️</div>
+      <div class="cert-kicker">CERTIFICATE OF COMPLETION</div>
+      <h1 class="cert-title">AvSec — Авиационная безопасность</h1>
+      <div class="cert-subtitle">Тренажёр по АБ · ICAO Приложение 17 / Doc 8973 / НППБ РТ</div>
+      <div class="cert-divider"></div>
+      <div class="cert-rank"><div class="cert-rank-name">${rank.name}</div><div class="cert-rank-sub">${rank.sub || "уровень"}</div></div>
+      <div class="cert-stats">
+        <div class="cert-stat"><div class="cert-stat-val">${xp}</div><div class="cert-stat-lbl">XP</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${correct}</div><div class="cert-stat-lbl">верных ответов</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${streak}</div><div class="cert-stat-lbl">дней подряд</div></div>
+      </div>
+      <div class="cert-footer"><div class="cert-date">${dateStr}</div><div class="cert-sign">AvSec PWA</div></div>
+    </div>
+    <div class="cert-actions">
+      <button class="cert-btn cert-btn-primary" id="certDownloadBtn">⬇ Скачать PNG</button>
+      <button class="cert-btn cert-btn-ghost" onclick="renderHome()">В меню</button>
+    </div></div>`;
+  const btn = $("#certDownloadBtn");
+  if (btn) btn.onclick = function () {
+    const W = 1000, H = 700, c = document.createElement("canvas"); c.width = W; c.height = H; const ctx = c.getContext("2d");
+    const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+    const bg = ctx.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#06121a"); bg.addColorStop(1, "#0e2632"); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    const p = 40; rr(p, p, W - p * 2, H - p * 2, 28); ctx.fillStyle = "#0b1f2a"; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = "#27e0a0"; rr(p, p, W - p * 2, H - p * 2, 28); ctx.stroke();
+    ctx.textAlign = "center"; const cx = W / 2;
+    ctx.fillStyle = "#46c2ff"; ctx.font = "76px 'Segoe UI Emoji', system-ui, sans-serif"; ctx.fillText("🛡️", cx, 170);
+    ctx.fillStyle = "#8fb3c2"; ctx.font = "600 20px system-ui, sans-serif"; ctx.fillText("C E R T I F I C A T E   O F   C O M P L E T I O N", cx, 225);
+    ctx.fillStyle = "#e8f4f8"; ctx.font = "700 44px system-ui, sans-serif"; ctx.fillText("AvSec — Авиационная безопасность", cx, 285);
+    ctx.fillStyle = "#8fb3c2"; ctx.font = "19px system-ui, sans-serif"; ctx.fillText("ICAO Приложение 17 · Doc 8973 · НППБ РТ", cx, 322);
+    ctx.strokeStyle = "rgba(39,224,160,0.5)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - 120, 350); ctx.lineTo(cx + 120, 350); ctx.stroke();
+    ctx.fillStyle = "#27e0a0"; ctx.font = "700 38px system-ui, sans-serif"; ctx.fillText(rank.name, cx, 410);
+    const stats = [[String(xp), "XP"], [String(correct), "верных ответов"], [String(streak), "дней подряд"]];
+    const colW = (W - p * 2 - 60) / 3, sx = p + 30 + colW / 2, sy = 530;
+    stats.forEach((s, i) => { const x = sx + i * colW; ctx.fillStyle = "#46c2ff"; ctx.font = "700 44px system-ui, sans-serif"; ctx.fillText(s[0], x, sy); ctx.fillStyle = "#8fb3c2"; ctx.font = "18px system-ui, sans-serif"; ctx.fillText(s[1], x, sy + 32); });
+    ctx.fillStyle = "#e8f4f8"; ctx.font = "600 24px system-ui, sans-serif"; ctx.fillText(dateStr, cx, 630);
+    const a = document.createElement("a"); a.download = "AvSec-certificate.png"; a.href = c.toDataURL("image/png"); document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+}
+
+/* ---------- Настройки ---------- */
+function renderSettings() {
+  app.innerHTML = `${topbar("Настройки")}<div class="qcard">
+    <div class="setrow"><div class="setlbl"><b>Звук</b><small>сигналы верно/неверно</small></div>
+      <button class="ghost" onclick="toggleSound()">${state.soundOn ? "🔊 Вкл" : "🔇 Выкл"}</button></div>
+    <div class="setrow col"><div class="setlbl"><b>Аэропорт / организация</b><small>для командного лидерборда (напр. DYU)</small></div>
+      <input id="orgInput" class="select" type="text" maxlength="24" placeholder="напр. DYU" value="${(state.org || "").replace(/"/g, "&quot;")}"></div>
+    <div class="setrow col"><div class="setlbl"><b>О тренажёре</b><small>версия 1.0</small></div>
+      <small class="qsub">AvSec — учебный тренажёр по авиационной безопасности на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.</small></div>
+  </div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+  const oi = $("#orgInput");
+  if (oi) oi.addEventListener("change", () => { state.org = oi.value.trim().slice(0, 24); save(); toast("Сохранено"); });
+}
+function toggleSound() { state.soundOn = !state.soundOn; save(); renderSettings(); }
+function resetAll() {
+  if (confirm("Сбросить весь прогресс, XP и ачивки?")) { localStorage.removeItem(SAVE_KEY); Object.assign(state, defaultState()); renderHome(); toast("Прогресс сброшен"); }
+}
+
+/* ===========================================================================
+   TELEGRAM MINI APP (под защитой — в обычном браузере не мешает)
+   =========================================================================== */
+const TG = (window.Telegram && window.Telegram.WebApp) || null;
+const inTelegram = !!(TG && TG.platform && TG.platform !== "unknown");
+function tgBack(show) { if (!inTelegram) return; try { show ? TG.BackButton.show() : TG.BackButton.hide(); } catch (e) {} }
+function tgHaptic(type) { if (!inTelegram) return; try { TG.HapticFeedback.notificationOccurred(type); } catch (e) {} }
+
+function startApp() {
+  initAnalytics(); track("app-open"); trackSource();
+  if (inTelegram) {
+    try {
+      TG.ready(); TG.expand();
+      if (TG.setBackgroundColor) TG.setBackgroundColor("#06121a");
+      if (TG.setHeaderColor) TG.setHeaderColor("#06121a");
+      if (TG.disableVerticalSwipes) TG.disableVerticalSwipes();
+      TG.BackButton.onClick(() => renderHome());
+    } catch (e) {}
+    try {
+      TG.CloudStorage.getItem(SAVE_KEY, (err, val) => {
+        if (!err && val) { try { const cloud = JSON.parse(val); if ((cloud.xp || 0) > (state.xp || 0)) Object.assign(state, defaultState(), cloud); } catch (e) {} }
+        renderHome();
+      });
+      return;
+    } catch (e) {}
+  }
+  renderHome();
+}
+startApp();
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});

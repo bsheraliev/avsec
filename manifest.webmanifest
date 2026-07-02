@@ -1,0 +1,16 @@
+{
+  "name": "AvSec — авиационная безопасность",
+  "short_name": "AvSec",
+  "description": "AvSec — игровой тренажёр по авиационной безопасности (АБ) для авиаперсонала. По ICAO Приложению 17, Doc 8973 и Национальной программе безопасности ГА РТ.",
+  "lang": "ru",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06121a",
+  "theme_color": "#06121a",
+  "categories": ["education"],
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
