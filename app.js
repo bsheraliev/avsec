@@ -154,9 +154,14 @@ function renderHome() {
       <div class="dbar"><div class="dfill" style="width:${Math.min(100, Math.round(todayC / state.daily.goal * 100))}%"></div></div>
       <span>🔥 <b>${state.daily.streak}</b> ${t("дн.")}</span>
     </div>
+    ${licenseBanner()}
     <div class="menu">
-      ${MENU.map((m, i) => tile(m.go, m.icon, t(m.title), m.go === "mistakes"
-        ? (mistakeCount() ? mistakeCount() + " " + t("на повторение") : t("ошибок пока нет")) : t(m.sub), isWip(m.go, i))).join("")}
+      ${MENU.map((m, i) => {
+        const cat = m.go.startsWith("quiz-") ? m.go.slice(5) : null;
+        if (cat && window.AvSecLic && AvSecLic.locked(cat)) return lockedTile(m.icon, t(m.title), t(m.sub));
+        return tile(m.go, m.icon, t(m.title), m.go === "mistakes"
+          ? (mistakeCount() ? mistakeCount() + " " + t("на повторение") : t("ошибок пока нет")) : t(m.sub), isWip(m.go, i));
+      }).join("")}
     </div>
     <div class="row2">
       <button class="ghost" onclick="renderAch()">${t("🏅 Ачивки")} (${Object.keys(state.achievements).length}/${DATA.achievements.length})</button>
@@ -178,6 +183,67 @@ function tile(go, icon, title, sub, wip) {
   return `<button class="tile" onclick="route('${go}')"><span class="ti">${icon}</span><span class="tt">${title}</span><span class="ts">${sub}</span></button>`;
 }
 function wipToast() { toast(t("Раздел на стадии разработки — скоро будет доступен"), "warn"); }
+
+/* ===========================================================================
+   ЛИЦЕНЗИЯ — баннер, заблокированные темы, экран ввода кода организации
+   =========================================================================== */
+function licenseBanner() {
+  if (!window.AvSecLic) return "";
+  if (AvSecLic.isFull()) {
+    const org = AvSecLic.org(), exp = AvSecLic.expires();
+    return `<div class="licbar ok">✅ ${t("Полный доступ")}${org ? " · " + org : ""}${exp ? " · " + t("до") + " " + exp : ""}</div>`;
+  }
+  const n = (DATA.quiz || []).length;
+  return `<div class="licbar demo">
+    <div class="licbar-txt">🔒 ${t("Демо-версия")} · ${n} ${t("вопр.")} ${t("из")} 134. ${t("Полный курс — по коду организации.")}</div>
+    <button class="licbtn" onclick="renderUnlock()">${t("Ввести код")}</button>
+  </div>`;
+}
+function lockedTile(icon, title, sub) {
+  return `<button class="tile locked" onclick="renderUnlock()"><span class="lockbadge">🔒 ${t("по лицензии")}</span><span class="ti">${icon}</span><span class="tt">${title}</span><span class="ts">${sub}</span></button>`;
+}
+function renderUnlock() {
+  track("open/unlock");
+  app.innerHTML = `${topbar("Полный доступ")}
+  <div class="unlock">
+    <div class="unlock-hero">🛡️🔓</div>
+    <h2>${t("Полный курс AvSec")}</h2>
+    <p class="unlock-sub">${t("134 вопроса по 11 темам, привязанных к Приложению 17 ИКАО и национальной программе. Доступ выдаётся организации по лицензии.")}</p>
+    <div class="unlock-form">
+      <input id="licCode" type="text" autocomplete="off" placeholder="${t("Код организации")}" />
+      <button class="primary" id="licGo" onclick="doUnlock()">${t("Разблокировать")}</button>
+    </div>
+    <div id="licMsg" class="unlock-msg"></div>
+    <p class="unlock-note">${t("Нет кода? Напишите нам — подключим вашу организацию:")}<br><b>b.sheraliev@gmail.com</b></p>
+  </div>`;
+  const inp = document.getElementById("licCode");
+  if (inp) { inp.focus(); inp.addEventListener("keydown", e => { if (e.key === "Enter") doUnlock(); }); }
+}
+function doUnlock() {
+  const inp = document.getElementById("licCode"), btn = document.getElementById("licGo"), msg = document.getElementById("licMsg");
+  const code = (inp && inp.value || "").trim();
+  if (!code) { if (msg) msg.innerHTML = `<span class="err">${t("Введите код")}</span>`; return; }
+  if (btn) { btn.disabled = true; btn.textContent = t("Проверка…"); }
+  if (msg) msg.innerHTML = "";
+  AvSecLic.unlock(code).then(res => {
+    if (res.ok) {
+      tgHaptic("success");
+      toast(t("Доступ открыт") + (res.org ? " · " + res.org : ""), "ok");
+      renderHome();
+    } else {
+      const map = {
+        invalid: t("Код не найден. Проверьте правильность."),
+        revoked: t("Лицензия отключена. Обратитесь к нам."),
+        expired: t("Срок лицензии истёк") + (res.expires ? " (" + res.expires + ")" : "") + ". " + t("Обратитесь для продления."),
+        network: t("Нет связи с сервером. Проверьте интернет."),
+        empty: t("Введите код")
+      };
+      if (btn) { btn.disabled = false; btn.textContent = t("Разблокировать"); }
+      if (msg) msg.innerHTML = `<span class="err">${map[res.error] || t("Не удалось разблокировать.")}</span>`;
+      tgHaptic("error");
+    }
+  });
+}
 function route(go) {
   track("open/" + go);
   if (go === "lessons") return renderLessons();
@@ -186,6 +252,7 @@ function route(go) {
   if (go === "mistakes") return startMistakes();
   if (go.startsWith("quiz-")) {
     const cat = go.slice(5);
+    if (window.AvSecLic && AvSecLic.locked(cat)) return renderUnlock();
     return startQuiz(shuffle(trimPool(DATA.quiz.filter(q => q.cat === cat))), CAT_NAMES[cat] || "Тест", cat);
   }
 }
@@ -336,7 +403,7 @@ function renderStats() {
 }
 
 /* ---------- Лидерборд (Google Apps Script — публичный URL, не секрет) ---------- */
-const LEADERBOARD = { scriptUrl: "https://script.google.com/macros/s/AKfycbxopx5gos9syKpagZCUtCuabEv_PyRQnsxYJMMy9XzxEG_zZ_O9tizjwi-AO5zcxU7X/exec" };
+const LEADERBOARD = { scriptUrl: "https://script.google.com/macros/s/AKfycbzzPC5DZm_c36DIjrT5yaxhlEgheqq8U-KO_fgNhskpJ27h6a5j-9mfaqR9xIbHsLnIYw/exec" };
 let lbMode = "players";
 
 /* ---------- Аналитика использования (GoatCounter — бесплатно, без cookies) ----------

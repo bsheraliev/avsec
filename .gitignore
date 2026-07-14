@@ -13,3 +13,8 @@ i18n.draft.json
 # локальный документ продвижения (не публиковать)
 AvSec-продвижение.md
 data.src.js
+
+# ключ AES и приватный GAS с ним — НЕ публиковать
+# (data.full.enc — публичный AES-шифр, он КОММИТИТСЯ; бесполезен без ключа)
+backend/_generated/
+.avsec-fullkey
