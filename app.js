@@ -174,7 +174,7 @@ function renderHome() {
     <button class="ghost fullrow" onclick="renderSettings()">${t("⚙️ Настройки")}</button>
     <button class="ghost danger fullrow" onclick="resetAll()">${t("↺ Сброс прогресса")}</button>
     <p class="disclaimer">${t("Учебный тренажёр на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.")}</p>
-    <p class="disclaimer">© 2026 Б.Б. Шералиев. ${t("Все права защищены. Копирование содержимого и кода без письменного разрешения автора запрещено.")} <a href="./TERMS.html" style="color:inherit;text-decoration:underline">${t("Условия")}</a></p>
+    <p class="disclaimer">© 2026 AvSec. ${t("Все права защищены. Копирование содержимого и кода без письменного разрешения правообладателя запрещено.")} <a href="./TERMS.html" style="color:inherit;text-decoration:underline">${t("Условия")}</a></p>
   `;
 }
 function tile(go, icon, title, sub, wip) {
@@ -215,7 +215,7 @@ function renderUnlock() {
       <button class="primary" id="licGo" onclick="doUnlock()">${t("Разблокировать")}</button>
     </div>
     <div id="licMsg" class="unlock-msg"></div>
-    <p class="unlock-note">${t("Нет кода? Напишите нам — подключим вашу организацию:")}<br><b>b.sheraliev@gmail.com</b></p>
+    <p class="unlock-note">${t("Нет кода? Обратитесь к вашей организации за кодом доступа.")}</p>
   </div>`;
   const inp = document.getElementById("licCode");
   if (inp) { inp.focus(); inp.addEventListener("keydown", e => { if (e.key === "Enter") doUnlock(); }); }
