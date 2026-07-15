@@ -66,7 +66,7 @@ const MENU = [
   { go: "quiz-culture", icon: "🤝", title: "Культура безопасности", sub: "АБ — дело каждого, конфиденциальность" },
   { go: "quiz-cyber", icon: "🖥️", title: "Киберигиена", sub: "Пароли, фишинг, USB" },
   { go: "quiz-service", icon: "🧑‍✈️", title: "По службам аэропорта", sub: "Перрон, регистрация, клининг, грузовая, ГСМ" },
-  { go: "exam", icon: "📝", title: "Экзамен", sub: "Случайный микс — 15 вопросов" },
+  { go: "exam", icon: "📝", title: "Аттестация", sub: "Проктор-экзамен · допуск экзаменатора + справка" },
   { go: "blitz", icon: "⏱️", title: "Экзамен на время", sub: "15 вопросов · таймер 20 c" },
   { go: "mistakes", icon: "🧯", title: "Работа над ошибками", sub: "" }
 ];
@@ -80,9 +80,9 @@ const MENU = [
      • полностью открыть тест: добавь его id (поле `go`) в LIVE_EXTRA;
      • открыть больше плиток сразу: увеличь WIP_AFTER;
      • вернуть все вопросы: поставь QUIZ_KEEP = 1. */
-const WIP_AFTER = 5;            // сколько плиток активно в начале меню
+const WIP_AFTER = 99;           // все разделы активны (аттестация, блиц, открытые вопросы включены)
 const LIVE_EXTRA = [];          // id игр (go), всегда активных независимо от позиции
-const QUIZ_KEEP = 0.4;          // доля вопросов категории, доступная сейчас (0.4 = −60%)
+const QUIZ_KEEP = 1;            // доступны все вопросы категории (включая открытые)
 function isWip(go, idx) { return idx >= WIP_AFTER && LIVE_EXTRA.indexOf(go) < 0; }
 function trimPool(list) {        // оставить долю QUIZ_KEEP вопросов (минимум 1)
   if (QUIZ_KEEP >= 1) return list;
@@ -90,6 +90,7 @@ function trimPool(list) {        // оставить долю QUIZ_KEEP вопр
   return list.slice(0, n);
 }
 
+function closedPool(list) { return list.filter(q => q.type !== "open"); }   // открытые вопросы — не для блица/аттестации
 function shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 function pick(arr, n) { return shuffle(arr).slice(0, n); }
 function rankFor(xp) { let r = DATA.ranks[0]; for (const x of DATA.ranks) if (xp >= x.xp) r = x; return r; }
@@ -130,7 +131,7 @@ function unlock(id) {
 
 /* ---------- Главный экран ---------- */
 function renderHome() {
-  lessonStopSpeak();
+  lessonStopSpeak(); attCleanup();
   const r = rankFor(state.xp), nx = nextRank(state.xp);
   const prog = nx ? Math.round(((state.xp - r.xp) / (nx.xp - r.xp)) * 100) : 100;
   tgBack(false);
@@ -195,7 +196,7 @@ function licenseBanner() {
   }
   const n = (DATA.quiz || []).length;
   return `<div class="licbar demo">
-    <div class="licbar-txt">🔒 ${t("Демо-версия")} · ${n} ${t("вопр.")} ${t("из")} 134. ${t("Полный курс — по коду организации.")}</div>
+    <div class="licbar-txt">🔒 ${t("Демо-версия")} · ${n} ${t("вопр.")} ${t("из")} 175. ${t("Полный курс — по коду организации.")}</div>
     <button class="licbtn" onclick="renderUnlock()">${t("Ввести код")}</button>
   </div>`;
 }
@@ -208,7 +209,7 @@ function renderUnlock() {
   <div class="unlock">
     <div class="unlock-hero">🛡️🔓</div>
     <h2>${t("Полный курс AvSec")}</h2>
-    <p class="unlock-sub">${t("134 вопроса по 11 темам, привязанных к Приложению 17 ИКАО и национальной программе. Доступ выдаётся организации по лицензии.")}</p>
+    <p class="unlock-sub">${t("175 вопросов по 11 темам (включая открытые с ИИ-проверкой), привязанных к Приложению 17 ИКАО и национальной программе. Доступ выдаётся организации по лицензии.")}</p>
     <div class="unlock-form">
       <input id="licCode" type="text" autocomplete="off" placeholder="${t("Код организации")}" />
       <button class="primary" id="licGo" onclick="doUnlock()">${t("Разблокировать")}</button>
@@ -247,8 +248,8 @@ function doUnlock() {
 function route(go) {
   track("open/" + go);
   if (go === "lessons") return renderLessons();
-  if (go === "exam") return startQuiz(pick(DATA.quiz, 15), "Экзамен", null);
-  if (go === "blitz") return startQuiz(pick(DATA.quiz, 15), "Экзамен на время", null, { timed: true, secs: 20 });
+  if (go === "exam") return renderAttest();                       // проктор-аттестация (замена «экзамена»)
+  if (go === "blitz") return startQuiz(pick(closedPool(DATA.quiz), 15), "Экзамен на время", null, { timed: true, secs: 20 });
   if (go === "mistakes") return startMistakes();
   if (go.startsWith("quiz-")) {
     const cat = go.slice(5);
@@ -283,6 +284,7 @@ function renderQuestion() {
   if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
   if (quiz.i >= quiz.qs.length || quiz.lives <= 0) return renderQuizResult();
   const q = quiz.qs[quiz.i];
+  if (q.type === "open") return renderOpenQuestion(q);
   const lq = locQ(q);
   const shown = shuffle(lq.a.map((t, idx) => ({ t, idx })));
   app.innerHTML = `
@@ -378,6 +380,290 @@ function startMistakes() {
   if (!qs.length) { toast("Ошибок нет — отличная работа!"); return; }
   startQuiz(shuffle(qs), "Работа над ошибками", "review");
 }
+
+/* ===========================================================================
+   ОТКРЫТЫЕ ВОПРОСЫ (развёрнутый ответ + ИИ-проверка) — в тренировке по темам.
+   Формат вопроса: { cat, type:"open", q, ref, crit:[...], src }.
+   ИИ-оценка идёт на общий бэкенд (LEADERBOARD.scriptUrl, action:"check");
+   при недоступности — локальная проверка по ключевым словам эталона.
+   =========================================================================== */
+function esc(s) { const d = document.createElement("div"); d.textContent = (s == null ? "" : String(s)); return d.innerHTML; }
+function backendUrl() { try { return LEADERBOARD.scriptUrl || ""; } catch (e) { return ""; } }
+function aiUrl() { return (localStorage.getItem("avsec_ai_url") || backendUrl()).trim(); }
+function setupAI() {
+  const cur = (localStorage.getItem("avsec_ai_url") || "").trim();
+  const v = prompt("URL эндпоинта ИИ-проверки открытых ответов (Apps Script, .../exec).\nПусто — использовать встроенный бэкенд по умолчанию:", cur);
+  if (v === null) return;
+  const s = v.trim(); if (s) localStorage.setItem("avsec_ai_url", s); else localStorage.removeItem("avsec_ai_url");
+  toast(s ? "Свой ИИ-эндпоинт сохранён" : "Будет использован встроенный бэкенд", "ok");
+}
+function renderOpenQuestion(q) {
+  const hasAI = !!aiUrl();
+  app.innerHTML = `
+    ${topbar(quiz.title)}
+    <div class="hud">
+      <span>${t("Вопрос")} ${quiz.i + 1}/${quiz.qs.length}</span>
+      <span class="lives">${"❤️".repeat(quiz.lives)}${"🖤".repeat(3 - quiz.lives)}</span>
+      <span class="streak">🔥 ${quiz.streak}</span>
+    </div>
+    <div class="qcard">
+      <div class="open-badge">✍️ ${hasAI ? t("Развёрнутый ответ · проверка ИИ") : t("Развёрнутый ответ · локальная проверка")}</div>
+      <div class="qtext">${q.q}</div>
+      <textarea class="open-input" id="openIn" rows="5" placeholder="${t("Введите ответ своими словами…")}"></textarea>
+      <button class="next" id="openGo">${t("Проверить ответ")}</button>
+      <div class="feedback" id="fb"></div>
+    </div>`;
+  const ta = $("#openIn"); if (ta) setTimeout(() => ta.focus(), 40);
+  $("#openGo").addEventListener("click", () => submitOpenAnswer(q));
+}
+async function submitOpenAnswer(q) {
+  const ta = $("#openIn"), go = $("#openGo");
+  if (!ta || ta.disabled) return;
+  const answer = (ta.value || "").trim();
+  if (answer.length < 3) { ta.focus(); return; }
+  ta.disabled = true; go.disabled = true; go.textContent = t("Проверяю…");
+  let res;
+  try { res = await checkOpen(q, answer); } catch (e) { res = localCheck(q, answer); res._offline = true; }
+  const correct = res.score >= 60;
+  tgHaptic(correct ? "success" : "error"); beep(correct);
+  quiz.log.push({ cat: q.cat || "other", ok: correct });
+  recordQuiz(q, correct); markDaily();
+  let gain = 0;
+  if (correct) {
+    quiz.correct++; quiz.streak++; state.totalCorrect++;
+    state.streakBest = Math.max(state.streakBest, quiz.streak);
+    unlock("first"); if (quiz.streak >= 5) unlock("streak5"); if (quiz.streak >= 10) unlock("streak10");
+    gain = 10 + Math.min(quiz.streak, 10); addXP(gain);
+  } else { quiz.streak = 0; quiz.lives--; }
+  showOpenResult(q, res, gain);
+  save();
+}
+async function checkOpen(q, answer) {
+  const url = aiUrl();
+  if (!url) return localCheck(q, answer);
+  const body = JSON.stringify({ action: "check", subject: "Авиационная безопасность (ИКАО Приложение 17)", q: q.q, ref: q.ref, crit: q.crit || [], answer });
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body });
+  if (!r.ok) throw new Error("http " + r.status);
+  const d = await r.json();
+  if (d && d.error) throw new Error(d.error);
+  return { score: Math.max(0, Math.min(100, Math.round(Number(d.score) || 0))), verdict: d.verdict || "", feedback: d.feedback || "", missing: Array.isArray(d.missing) ? d.missing : [], _ai: true };
+}
+function localCheck(q, answer) {
+  const norm = s => (s || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9 ]/g, " ");
+  const stop = new Set("и в во не на с со что а то как по из у за от о об для при или это его ее к до же бы был быть есть их они она он мы вы я но да чтобы если так уже еще нет ли бо про над под без через между".split(" "));
+  const terms = [...new Set(norm(q.ref).split(/\s+/).filter(w => w.length > 3 && !stop.has(w)))];
+  const ans = norm(answer);
+  const hit = terms.filter(term => ans.indexOf(term) >= 0);
+  const score = terms.length ? Math.round(hit.length / terms.length * 100) : 0;
+  return {
+    score, verdict: score >= 60 ? "зачтено (локально)" : "сверьте с эталоном",
+    feedback: "Локальная проверка по ключевым словам эталона (ИИ недоступен). Сверьте свой ответ с эталоном ниже.",
+    missing: terms.filter(term => ans.indexOf(term) < 0).slice(0, 8), _local: true
+  };
+}
+function showOpenResult(q, res, gain) {
+  const ok = res.score >= 60, fb = $("#fb");
+  let h = `<div class="fb ${ok ? "ok" : "no"}">${ok ? "✅ " + t("Зачтено") : "❌ " + t("Незачтено")} · ${t("оценка")} ${res.score}/100${gain ? " +" + gain + " XP" : ""}</div>`;
+  if (res.verdict) h += `<div class="why"><b>${t("Вердикт")}:</b> ${esc(res.verdict)}${res.feedback ? "<br>" + esc(res.feedback) : ""}</div>`;
+  else if (res.feedback) h += `<div class="why">${esc(res.feedback)}</div>`;
+  if (res.missing && res.missing.length) h += `<div class="why"><b>${t("Стоит добавить")}:</b> ${res.missing.map(esc).join(", ")}</div>`;
+  h += `<div class="why"><b>${t("Эталонный ответ")}:</b><br>${esc(q.ref)}</div>`;
+  if (q.src) h += `<div class="src">📄 ${q.src}</div>`;
+  if (res._local || res._offline) h += `<div class="src">${t("Оценка локальная (без ИИ). Подключить ИИ-проверку — в «Настройках».")}</div>`;
+  h += `<button class="next" id="next">${quiz.i + 1 >= quiz.qs.length || quiz.lives <= 0 ? t("Итог →") : t("Дальше →")}</button>`;
+  fb.innerHTML = h;
+  $("#next").addEventListener("click", () => { quiz.i++; renderQuestion(); });
+}
+
+/* ===========================================================================
+   АТТЕСТАЦИЯ — проктор-экзамен (замена «Экзамена»): допуск экзаменатора
+   (одноразовый код в Telegram), таймер, антисписывание, справка с ФИО,
+   журнал прохождений, отчёт экзаменатору. Только закрытые вопросы.
+   =========================================================================== */
+const ATT = { N: 20, PASS: 0.75, TIME: 15 * 60, PER_Q: 45, HIST_KEY: "avsec_attest_hist", HIST_MAX: 60 };
+let att = null, attTimer = null, attQTimer = null;
+function attFmt(s) { const m = Math.floor(s / 60), x = s % 60; return m + ":" + String(x).padStart(2, "0"); }
+function attCleanup() { attStopTimer(); attStopQ(); document.body.classList.remove("exam-lock"); }
+function renderAttest() {
+  attCleanup(); tgBack(true);
+  att = { name: (att && att.name) || "", unit: (att && att.unit) || "", reqId: null };
+  app.innerHTML = `${topbar("Аттестация")}
+    <div class="qcard">
+      <div class="open-badge">🎓 ${t("Проктор-экзамен · допуск экзаменатора")}</div>
+      <p class="qsub">${t("20 вопросов · лимит 15 мин · проходной 75% · справка о прохождении. Старт — после ввода данных и получения кода допуска у экзаменатора.")}</p>
+      <input id="attName" class="select" type="text" placeholder="${t("Фамилия, имя, отчество")}" value="${esc(att.name)}">
+      <input id="attUnit" class="select" type="text" placeholder="${t("Подразделение / должность")}" value="${esc(att.unit)}">
+      <button class="next" id="attReq" disabled>${t("Запросить допуск")}</button>
+      <div id="attApprove" class="attapprove" style="display:none">
+        <div class="why" id="attMsg"></div>
+        <input id="attCode" class="select" type="text" inputmode="numeric" placeholder="${t("Код от экзаменатора")}">
+        <button class="next" id="attGo">${t("Начать аттестацию")}</button>
+      </div>
+    </div>
+    <button class="ghost fullrow" onclick="renderAttestLog()">📋 ${t("Журнал аттестаций")}</button>
+    <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
+  const nm = $("#attName"), un = $("#attUnit"), rq = $("#attReq");
+  const val = () => { rq.disabled = !(nm.value.trim() && un.value.trim()); };
+  nm.addEventListener("input", val); un.addEventListener("input", val); val();
+  rq.addEventListener("click", attestRequest);
+  $("#attGo").addEventListener("click", attestVerify);
+  $("#attCode").addEventListener("keydown", e => { if (e.key === "Enter") attestVerify(); });
+}
+async function attestRequest() {
+  const nm = $("#attName"), un = $("#attUnit"), rq = $("#attReq");
+  att.name = nm.value.trim(); att.unit = un.value.trim();
+  if (!att.name || !att.unit) return;
+  const lbl = rq.textContent; rq.disabled = true; rq.textContent = t("Отправляю запрос…");
+  try {
+    const r = await fetch(aiUrl(), { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "request", name: att.name, unit: att.unit, subject: "AvSec · Авиационная безопасность", catName: "Аттестация" }) });
+    if (!r.ok) throw new Error("http " + r.status);
+    const d = await r.json();
+    if (!d.ok || !d.reqId) throw new Error(d.error || "нет ответа сервера");
+    att.reqId = d.reqId;
+    rq.style.display = "none";
+    $("#attMsg").innerHTML = `${t("Запрос")} <b>№${esc(d.reqId)}</b> ${t("отправлен экзаменатору")}${d.delivered ? "" : " <span style='color:var(--red)'>(" + t("Telegram не настроен") + ")</span>"}. ${t("Получите код у экзаменатора и введите ниже:")}`;
+    $("#attApprove").style.display = "block";
+    setTimeout(() => $("#attCode").focus(), 40);
+  } catch (e) {
+    toast(t("Не удалось запросить код. Проверьте связь."), "warn");
+    rq.disabled = false; rq.textContent = lbl;
+  }
+}
+async function attestVerify() {
+  const code = $("#attCode").value.trim(); if (!code) return;
+  const go = $("#attGo"), lbl = go.textContent; go.disabled = true; go.textContent = t("Проверяю…");
+  try {
+    const r = await fetch(aiUrl(), { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "verify", reqId: att.reqId, code }) });
+    if (!r.ok) throw new Error("http " + r.status);
+    const d = await r.json();
+    if (d.ok) { startAttest(); return; }
+    toast(t("Неверный или просроченный код."), "warn");
+  } catch (e) { toast(t("Ошибка проверки кода."), "warn"); }
+  $("#attCode").value = ""; go.disabled = false; go.textContent = lbl; $("#attCode").focus();
+}
+function startAttest() {
+  const pool = shuffle(closedPool(DATA.quiz));
+  const list = pool.slice(0, Math.min(ATT.N, pool.length));
+  if (!list.length) { toast("Нет вопросов для аттестации"); return; }
+  tgBack(false);
+  att.list = list; att.i = 0; att.correct = 0; att.wrong = []; att.switches = 0; att.finished = false;
+  att.startTs = Date.now(); att.timeLeft = ATT.TIME; att.answered = false;
+  document.body.classList.add("exam-lock");
+  attStartTimer(); attRenderQ();
+}
+function attStartTimer() { attStopTimer(); attUpdTimer(); attTimer = setInterval(() => { att.timeLeft--; attUpdTimer(); if (att.timeLeft <= 0) { attStopTimer(); attFinish(true); } }, 1000); }
+function attStopTimer() { if (attTimer) { clearInterval(attTimer); attTimer = null; } }
+function attUpdTimer() { const e = $("#attClock"); if (e) { e.textContent = "⏱ " + attFmt(Math.max(0, att.timeLeft)); e.classList.toggle("low", att.timeLeft <= 60); } }
+function attStartQ() { attStopQ(); att.qLeft = ATT.PER_Q; attUpdQ(); attQTimer = setInterval(() => { att.qLeft--; attUpdQ(); if (att.qLeft <= 0) { attStopQ(); attAutoAdvance(); } }, 1000); }
+function attStopQ() { if (attQTimer) { clearInterval(attQTimer); attQTimer = null; } }
+function attUpdQ() { const e = $("#attQtime"); if (e) { e.textContent = "⏳ " + Math.max(0, att.qLeft) + " c"; e.classList.toggle("low", att.qLeft <= 10); } }
+function attAutoAdvance() {
+  if (!att.answered) { att.answered = true; const q = att.list[att.i], lq = locQ(q); att.wrong.push({ q: lq.q, your: "(не отвечено — время вышло)", right: lq.a[q.correct], why: lq.why || "" }); }
+  attNext();
+}
+function attActive() { return att && !att.finished && !!$("#attQtime"); }
+function attRenderQ() {
+  const q = att.list[att.i]; att.answered = false;
+  const lq = locQ(q);
+  const shown = shuffle(lq.a.map((tx, idx) => ({ tx, idx })));
+  app.innerHTML = `
+    <div class="topbar"><span class="ttitle">${t("Аттестация")}</span><span class="attclock" id="attClock"></span></div>
+    <div class="hud">
+      <span>${t("Вопрос")} ${att.i + 1}/${att.list.length}</span>
+      <span class="attqtime" id="attQtime"></span>
+      <span class="attsw" id="attSw"></span>
+    </div>
+    <div class="qcard">
+      <div class="qtext">${lq.q}</div>
+      <div class="opts">${shown.map(o => `<button class="opt" data-i="${o.idx}">${o.tx}</button>`).join("")}</div>
+      <div class="feedback" id="fb"></div>
+    </div>`;
+  $$(".opt").forEach(b => b.addEventListener("click", () => attAnswer(parseInt(b.dataset.i), b)));
+  attUpdTimer(); attUpdSwitch(); attStartQ();
+}
+function attUpdSwitch() { const e = $("#attSw"); if (e) e.textContent = att.switches > 0 ? ("⚠ " + t("уходов") + ": " + att.switches) : ""; }
+function attAnswer(chosen, btn) {
+  if (att.answered) return; att.answered = true; attStopQ();
+  const q = att.list[att.i], lq = locQ(q), ok = chosen === q.correct;
+  if (ok) att.correct++; else att.wrong.push({ q: lq.q, your: lq.a[chosen], right: lq.a[q.correct], why: lq.why || "" });
+  $$(".opt").forEach(b => { const i = parseInt(b.dataset.i); b.disabled = true; if (i === q.correct) b.classList.add("right"); else if (b === btn) b.classList.add("wrong"); });
+  tgHaptic(ok ? "success" : "error"); beep(ok);
+  $("#fb").innerHTML = `<div class="fb ${ok ? "ok" : "no"}">${ok ? "✅ " + t("Верно") : "❌ " + t("Неверно")}</div>` +
+    `<button class="next" id="next">${att.i + 1 >= att.list.length ? t("Завершить") : t("Дальше →")}</button>`;
+  $("#next").addEventListener("click", attNext);
+}
+function attNext() { if (att.i < att.list.length - 1) { att.i++; attRenderQ(); window.scrollTo({ top: 0, behavior: "smooth" }); } else attFinish(false); }
+function attFinish(timeout) {
+  if (!att || att.finished) return; att.finished = true; attCleanup(); tgBack(true);
+  att.elapsed = Math.round((Date.now() - att.startTs) / 1000);
+  const total = att.list.length, ok = att.correct, pct = Math.round(ok / total * 100), pass = pct >= ATT.PASS * 100;
+  const now = new Date(), pad = n => String(n).padStart(2, "0");
+  const ds = `${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  attSaveHist({ d: now.toISOString(), name: att.name, unit: att.unit, pct, ok, total, sec: att.elapsed, pass, sw: att.switches });
+  attReport(pct, ok, total, pass);
+  const vc = pass ? "ok" : "no";
+  app.innerHTML = `${topbar("Аттестация")}
+    <div class="result">
+      <div class="bigpct ${vc}">${pct}%</div>
+      <div class="verdict ${vc}">${pass ? t("Аттестация пройдена") : t("Аттестация не пройдена")}</div>
+      <div class="rstats">${timeout ? t("Время вышло") + ". " : ""}${t("Правильно")} ${ok} ${t("из")} ${total} · ${t("время")} ${attFmt(att.elapsed)}${att.switches > 0 ? " · ⚠ " + t("уходов") + " " + att.switches : ""}</div>
+    </div>
+    <div class="cert-wrap" style="margin-top:14px"><div class="cert-card">
+      <div class="cert-emblem">🛡️</div>
+      <div class="cert-kicker">СПРАВКА О ПРОХОЖДЕНИИ</div>
+      <h1 class="cert-title">AvSec — Аттестация по авиабезопасности</h1>
+      <div class="cert-subtitle">ICAO Приложение 17 · Doc 8973 · НППБ РТ</div>
+      <div class="cert-divider"></div>
+      <div class="cert-rank"><div class="cert-rank-name">${esc(att.name)}</div><div class="cert-rank-sub">${esc(att.unit)}</div></div>
+      <div class="cert-stats">
+        <div class="cert-stat"><div class="cert-stat-val">${pct}%</div><div class="cert-stat-lbl">результат</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${ok}/${total}</div><div class="cert-stat-lbl">верных</div></div>
+        <div class="cert-stat"><div class="cert-stat-val" style="color:${pass ? "var(--green)" : "var(--red)"}">${pass ? "СДАН" : "НЕ СДАН"}</div><div class="cert-stat-lbl">статус</div></div>
+      </div>
+      <div class="cert-footer"><div class="cert-date">${ds}</div><div class="cert-sign">${att.reqId ? "№" + esc(att.reqId) : "AvSec"}</div></div>
+    </div></div>
+    <div class="row2" style="margin-top:14px">
+      <button class="primary" onclick="window.print()">🖨 ${t("Печать / PDF")}</button>
+      <button class="ghost" onclick="renderAttest()">↻ ${t("Ещё раз")}</button>
+    </div>
+    ${attReview()}
+    <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
+  if (pass) confetti();
+}
+function attReview() {
+  if (!att.wrong.length) return `<div class="chresult" style="margin-top:14px"><b>${t("Ошибок нет")}</b> — ${t("отличная работа!")}</div>`;
+  let h = `<div class="breakdown" style="margin-top:16px"><div class="brtitle">${t("Разбор ошибок")} (${att.wrong.length})</div>`;
+  att.wrong.forEach(w => { h += `<div class="qcard" style="margin-bottom:8px"><div class="qtext" style="font-size:14px">${esc(w.q)}</div><div class="why">${t("Ваш ответ")}: ${esc(w.your)}<br>${t("Верно")}: <b>${esc(w.right)}</b>${w.why ? "<br>" + esc(w.why) : ""}</div></div>`; });
+  return h + `</div>`;
+}
+function attReport(pct, ok, total, pass) {
+  try {
+    fetch(aiUrl(), { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "report", reqId: att.reqId, name: att.name, unit: att.unit, subject: "AvSec · Авиационная безопасность", catName: "Аттестация", pct, ok, total, pass, switches: att.switches, sec: att.elapsed }) });
+  } catch (e) {}
+}
+function attLoadHist() { try { return JSON.parse(localStorage.getItem(ATT.HIST_KEY) || "[]"); } catch (e) { return []; } }
+function attSaveHist(rec) { const h = attLoadHist(); h.unshift(rec); if (h.length > ATT.HIST_MAX) h.length = ATT.HIST_MAX; try { localStorage.setItem(ATT.HIST_KEY, JSON.stringify(h)); } catch (e) {} }
+function renderAttestLog() {
+  const h = attLoadHist();
+  const rows = h.length ? h.map(r => {
+    const d = new Date(r.d).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return `<div class="lbrow"><span class="lbpos">${r.pass ? "✅" : "❌"}</span><span class="lbname">${esc(r.name)}<small class="lborg">${esc(r.unit)} · ${d}${r.sw > 0 ? " · ⚠" + r.sw : ""}</small></span><span class="lbscore">${r.pct}%</span></div>`;
+  }).join("") : `<div class="qsub">${t("Записей пока нет. Пройдите аттестацию — результат сохранится здесь.")}</div>`;
+  app.innerHTML = `${topbar("Журнал аттестаций")}<div class="qcard">${rows}</div>
+    ${h.length ? `<button class="ghost danger fullrow" onclick="if(confirm('Очистить журнал аттестаций на этом устройстве?')){localStorage.removeItem('${ATT.HIST_KEY}');renderAttestLog();}">${t("Очистить журнал")}</button>` : ""}
+    <button class="ghost fullrow" onclick="renderAttest()">${t("‹ Аттестация")}</button>`;
+}
+/* Антисписывание — активно только во время аттестации (body.exam-lock). */
+function attOnVisibility() {
+  if (document.hidden) { if (attActive()) { att.switches = (att.switches || 0) + 1; attUpdSwitch(); } }
+  else if (attActive() && att.switches > 0) { toast("⚠️ " + t("Зафиксирован выход из аттестации") + " (" + att.switches + ")", "warn"); }
+}
+function attBlock(e) { if (document.body.classList.contains("exam-lock")) { e.preventDefault(); return false; } }
+document.addEventListener("visibilitychange", attOnVisibility);
+["copy", "cut", "contextmenu", "selectstart", "dragstart"].forEach(ev => document.addEventListener(ev, attBlock));
 
 /* ---------- Ачивки / Статистика ---------- */
 function renderAch() {
@@ -715,6 +1001,8 @@ function renderSettings() {
       <button class="ghost" onclick="toggleSound()">${state.soundOn ? "🔊 Вкл" : "🔇 Выкл"}</button></div>
     <div class="setrow col"><div class="setlbl"><b>Аэропорт / организация</b><small>для командного лидерборда (напр. DYU)</small></div>
       <input id="orgInput" class="select" type="text" maxlength="24" placeholder="напр. DYU" value="${(state.org || "").replace(/"/g, "&quot;")}"></div>
+    <div class="setrow"><div class="setlbl"><b>ИИ-проверка открытых ответов</b><small>${(localStorage.getItem("avsec_ai_url") || "").trim() ? "свой эндпоинт" : "встроенный бэкенд"}</small></div>
+      <button class="ghost" onclick="setupAI()">⚙️ Настроить</button></div>
     <div class="setrow col"><div class="setlbl"><b>О тренажёре</b><small>версия 1.0</small></div>
       <small class="qsub">AvSec — учебный тренажёр по авиационной безопасности на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.</small></div>
   </div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
