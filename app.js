@@ -7,6 +7,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
+const CONTACT_TG = "https://t.me/Ori_gemini_bot";   // контакт/поддержка в Telegram
 
 function defaultState() {
   return {
@@ -171,6 +172,7 @@ function renderHome() {
     <button class="ghost fullrow" onclick="renderLeaderboard()">${t("🏆 Лидерборд")}</button>
     <button class="ghost fullrow" onclick="renderCertificate()">${t("🎓 Сертификат о прохождении")}</button>
     <button class="ghost fullrow" onclick="shareApp()">${t("📨 Поделиться с коллегой")}</button>
+    <a class="ghost fullrow" style="display:block;text-align:center;text-decoration:none" href="${CONTACT_TG}" target="_blank" rel="noopener">${t("✈️ Связаться / поддержка")}</a>
     <button class="ghost fullrow" onclick="renderSettings()">${t("⚙️ Настройки")}</button>
     <button class="ghost danger fullrow" onclick="resetAll()">${t("↺ Сброс прогресса")}</button>
     <p class="disclaimer">${t("Учебный тренажёр на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.")}</p>
@@ -216,6 +218,7 @@ function renderUnlock() {
     </div>
     <div id="licMsg" class="unlock-msg"></div>
     <p class="unlock-note">${t("Нет кода? Обратитесь к вашей организации за кодом доступа.")}</p>
+    <a class="primary" style="display:block;text-align:center;text-decoration:none;max-width:340px;margin:8px auto 0" href="${CONTACT_TG}" target="_blank" rel="noopener">${t("✈️ Связаться в Telegram")}</a>
   </div>`;
   const inp = document.getElementById("licCode");
   if (inp) { inp.focus(); inp.addEventListener("keydown", e => { if (e.key === "Enter") doUnlock(); }); }
