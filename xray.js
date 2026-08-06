@@ -13,10 +13,13 @@
    подгоняются по viewBox (vw × vh), координаты целей задаются в тех же единицах.
    =========================================================================== */
 var XRAY = (function () {
-  var ORG = "#e8912f", ORG_D = "#b96a12";      // органика
-  var MET = "#4a86c8", MET_D = "#1f4f86";      // металл
-  var INO = "#4fa564";                          // неорганика
-  var DENSE = "#0d1a2b";                        // плотный металл
+  /* Палитра двухэнергетического досмотрового монитора: светлый фон,
+     объекты накладываются в режиме multiply — плотности суммируются, как на
+     реальном просвечивающем снимке. */
+  var ORG = "#f0921f", ORG_D = "#c46a08";      // органика — оранжевый
+  var MET = "#2f6fb5", MET_D = "#17427a";      // металл — синий
+  var INO = "#46a05a";                          // неорганика / смеси — зелёный
+  var DENSE = "#101820";                        // непроницаемое — почти чёрный
 
   /* --- элементы снимка (силуэты) --- */
   function gun(x, y, s) {
@@ -64,7 +67,7 @@ var XRAY = (function () {
       'transform="rotate(' + (rot || 0) + ',' + (x + w / 2) + ',' + (y + h / 2) + ')"/>';
   }
   function cloth(x, y, rx, ry) {
-    return '<ellipse cx="' + x + '" cy="' + y + '" rx="' + rx + '" ry="' + ry + '" fill="' + ORG + '" opacity=".38"/>';
+    return '<ellipse cx="' + x + '" cy="' + y + '" rx="' + rx + '" ry="' + ry + '" fill="' + ORG + '" opacity=".3"/>';
   }
   function cable(x, y) {
     return '<path d="M' + x + ',' + y + ' q14,-12 28,0 q14,12 28,0" fill="none" stroke="' + INO + '" stroke-width="4" opacity=".8"/>';
@@ -152,12 +155,32 @@ var XRAY = (function () {
   /* --- каркас сумки --- */
   function bag(inner) {
     return '<svg viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg" class="xrsvg">' +
-      '<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">' +
-      '<stop offset="0" stop-color="#0a1119"/><stop offset="1" stop-color="#060b12"/></linearGradient></defs>' +
-      '<rect width="400" height="260" fill="url(#bg)"/>' +
-      '<rect x="14" y="18" width="372" height="228" rx="16" fill="#0f1a26" stroke="#24405c" stroke-width="2"/>' +
-      '<path d="M170,18 q30,-14 60,0" fill="none" stroke="#24405c" stroke-width="6"/>' +
-      inner + '</svg>';
+      '<defs>' +
+      /* зерно детектора */
+      '<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" result="n"/>' +
+      '<feColorMatrix in="n" type="saturate" values="0"/>' +
+      '<feComponentTransfer><feFuncA type="linear" slope="0.09"/></feComponentTransfer>' +
+      '<feComposite operator="over" in2="SourceGraphic"/></filter>' +
+      /* лёгкая нерезкость луча */
+      '<filter id="soft"><feGaussianBlur stdDeviation="0.45"/></filter>' +
+      '<linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#efe9dc"/><stop offset="1" stop-color="#e2dacb"/></linearGradient>' +
+      '</defs>' +
+      /* фон ленты — светлый, как на мониторе оператора */
+      '<rect width="400" height="260" fill="#fbfaf6"/>' +
+      '<g filter="url(#soft)">' +
+      /* корпус сумки: сам по себе даёт слабое затемнение */
+      '<rect x="14" y="18" width="372" height="228" rx="18" fill="url(#shell)" ' +
+      'stroke="#c9bfab" stroke-width="2" style="mix-blend-mode:multiply"/>' +
+      '<path d="M170,18 q30,-16 60,0" fill="none" stroke="#c9bfab" stroke-width="7" style="mix-blend-mode:multiply"/>' +
+      /* застёжка-молния */
+      '<line x1="26" y1="42" x2="374" y2="42" stroke="#b8ad97" stroke-width="1.6" ' +
+      'stroke-dasharray="3 3" style="mix-blend-mode:multiply"/>' +
+      /* содержимое — накладывается по плотности */
+      '<g style="mix-blend-mode:multiply">' + inner + '</g>' +
+      '</g>' +
+      '<rect width="400" height="260" filter="url(#grain)" fill="none" pointer-events="none"/>' +
+      '</svg>';
   }
 
   /* --- сцены --- */

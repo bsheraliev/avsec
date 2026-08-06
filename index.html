@@ -162,18 +162,26 @@ html,body{margin:0;padding:0;background:
 .feedback{margin-top:6px}
 /* ----- Распознавание на рентгене ----- */
 .xrwrap{position:relative;margin:10px 0;border-radius:14px;overflow:hidden;border:1px solid var(--line);
-  background:#060b12;cursor:crosshair;touch-action:manipulation}
+  background:#fbfaf6;cursor:crosshair;touch-action:manipulation}
+/* режимы просмотра, как на мониторе оператора */
+.xrwrap.bw .xrsvg{filter:grayscale(1) contrast(1.2)}
+.xrwrap.neg .xrsvg{filter:invert(1) hue-rotate(180deg)}
+.xrmodes{display:flex;gap:6px;margin:8px 0 2px}
+.xrmode{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:10px;
+  padding:7px 4px;font-size:11.5px;font-weight:600;cursor:pointer}
+.xrmode.on{border-color:var(--green);color:var(--green)}
+.xrmode:active{transform:scale(.97)}
 .xrsvg{display:block;width:100%;height:auto}
 .xrmarks{position:absolute;inset:0;pointer-events:none}
-.xrbox{position:absolute;border:2.5px solid var(--green);border-radius:6px;
-  box-shadow:0 0 0 2px rgba(0,0,0,.45), 0 0 14px rgba(39,224,160,.5);animation:xrpop .22s ease-out}
-.xrbox.miss{border-color:var(--red);box-shadow:0 0 0 2px rgba(0,0,0,.45), 0 0 14px rgba(255,107,107,.55)}
+.xrbox{position:absolute;border:2.5px solid #12b37c;border-radius:6px;
+  box-shadow:0 0 0 2px rgba(255,255,255,.75), 0 0 12px rgba(18,179,124,.55);animation:xrpop .22s ease-out}
+.xrbox.miss{border-color:#e03131;box-shadow:0 0 0 2px rgba(255,255,255,.75), 0 0 12px rgba(224,49,49,.5)}
 .xrbox span{position:absolute;left:0;top:-19px;font-size:10px;font-weight:800;white-space:nowrap;
-  background:var(--green);color:#04120c;border-radius:5px;padding:2px 6px}
-.xrbox.miss span{background:var(--red);color:#2a0606}
+  background:#12b37c;color:#fff;border-radius:5px;padding:2px 6px}
+.xrbox.miss span{background:#e03131;color:#fff}
 @keyframes xrpop{from{transform:scale(1.25);opacity:0}to{transform:scale(1);opacity:1}}
 .xrdot{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
-  border:2px solid var(--red);animation:xrfade .9s ease-out forwards}
+  border:2.5px solid #e03131;box-shadow:0 0 0 1.5px rgba(255,255,255,.7);animation:xrfade .9s ease-out forwards}
 @keyframes xrfade{from{transform:scale(.4);opacity:1}to{transform:scale(1.8);opacity:0}}
 .xrbar{display:flex;gap:8px;margin-top:4px}
 .xrbar .ghost,.xrbar .next{flex:1}

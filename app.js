@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const CONTACT_TG = "https://t.me/Ori_gemini_bot";   // контакт/поддержка в Telegram
 
 function defaultState() {
@@ -301,6 +301,12 @@ function route(go) {
    «Нарушений нет»). Проверка попадания по зонам targets в координатах viewBox.
    =========================================================================== */
 let xr = null;        // { list, i, correct, found, done }
+let xrView = "";      // режим просмотра: "" цвет · "bw" ч/б · "neg" негатив
+function setXrView(v) {
+  xrView = v;
+  const w = $("#xrwrap"); if (w) w.className = "xrwrap " + v;
+  $$(".xrmode").forEach((b, i) => b.classList.toggle("on", ["", "bw", "neg"][i] === v));
+}
 let _xrLocal = null;  // снимки из ./xray/scenes.json (реальные TIP, не в публичном репо)
 
 /* Подхватываем локальные снимки, если папка xray/ заполнена (см. xray/README.md).
@@ -334,9 +340,13 @@ function renderXrayScene() {
       <span>${t("Снимок")} ${xr.i + 1}/${xr.list.length}</span>
       <span class="xrtask">${t(s.task)}</span>
     </div>
-    <div class="xrwrap" id="xrwrap">
+    <div class="xrwrap ${xrView}" id="xrwrap">
       ${s.img ? `<img src="${s.img}" class="xrsvg" alt="">` : s.svg}
       <div class="xrmarks" id="xrmarks"></div>
+    </div>
+    <div class="xrmodes">
+      ${[["", "Цвет"], ["bw", "Ч/Б"], ["neg", "Негатив"]].map(m =>
+        `<button class="xrmode ${xrView === m[0] ? "on" : ""}" onclick="setXrView('${m[0]}')">${t(m[1])}</button>`).join("")}
     </div>
     <div class="xrbar">
       <button class="ghost" onclick="xrayHint()">💡 ${t("Подсказка")}</button>
