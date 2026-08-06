@@ -159,6 +159,28 @@ html,body{margin:0;padding:0;background:
 .opt.wrong{border-color:var(--red);background:rgba(255,107,107,.14);color:#ffd0d0}
 
 .feedback{margin-top:6px}
+/* ----- Распознавание на рентгене ----- */
+.xrwrap{position:relative;margin:10px 0;border-radius:14px;overflow:hidden;border:1px solid var(--line);
+  background:#060b12;cursor:crosshair;touch-action:manipulation}
+.xrsvg{display:block;width:100%;height:auto}
+.xrmarks{position:absolute;inset:0;pointer-events:none}
+.xrbox{position:absolute;border:2.5px solid var(--green);border-radius:6px;
+  box-shadow:0 0 0 2px rgba(0,0,0,.45), 0 0 14px rgba(39,224,160,.5);animation:xrpop .22s ease-out}
+.xrbox.miss{border-color:var(--red);box-shadow:0 0 0 2px rgba(0,0,0,.45), 0 0 14px rgba(255,107,107,.55)}
+.xrbox span{position:absolute;left:0;top:-19px;font-size:10px;font-weight:800;white-space:nowrap;
+  background:var(--green);color:#04120c;border-radius:5px;padding:2px 6px}
+.xrbox.miss span{background:var(--red);color:#2a0606}
+@keyframes xrpop{from{transform:scale(1.25);opacity:0}to{transform:scale(1);opacity:1}}
+.xrdot{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
+  border:2px solid var(--red);animation:xrfade .9s ease-out forwards}
+@keyframes xrfade{from{transform:scale(.4);opacity:1}to{transform:scale(1.8);opacity:0}}
+.xrbar{display:flex;gap:8px;margin-top:4px}
+.xrbar .ghost,.xrbar .next{flex:1}
+.xrtask{color:var(--txt);font-weight:700;text-align:right;max-width:62%}
+.feedback .good{background:rgba(39,224,160,.13);border:1px solid var(--green);color:var(--txt);
+  border-radius:12px;padding:11px 12px;font-size:13px;line-height:1.5}
+.feedback .bad{background:rgba(255,107,107,.12);border:1px solid var(--red);color:var(--txt);
+  border-radius:12px;padding:11px 12px;font-size:13px;line-height:1.5}
 .fb{padding:12px;border-radius:12px;font-weight:700;margin-top:14px;font-size:14px}
 .fb.ok{background:rgba(39,224,160,.14);color:var(--green)}
 .fb.no{background:rgba(255,107,107,.14);color:var(--red)}
@@ -410,6 +432,7 @@ body.exam-lock .opt,body.exam-lock .qtext{-webkit-touch-callout:none}
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="./i18n.js"></script>
 <script src="./data.js"></script>
+<script src="./xray.js"></script>
 <script src="./license.js"></script>
 <script src="./app.js"></script>
 </body>

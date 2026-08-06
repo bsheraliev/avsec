@@ -89,6 +89,7 @@ const MENU = [
   { go: "quiz-response", icon: "🚨", title: "Действия при угрозе", sub: "Тревога, эвакуация, бомбовая угроза" },
   { go: "quiz-culture", icon: "🤝", title: "Культура безопасности", sub: "АБ — дело каждого, конфиденциальность" },
   { go: "quiz-cyber", icon: "🖥️", title: "Киберигиена", sub: "Пароли, фишинг, USB" },
+  { go: "xray", icon: "🩻", title: "Распознавание на рентгене", sub: "Снимок интроскопа · найди запрещённый предмет" },
   { go: "quiz-service", icon: "🧑‍✈️", title: "По службам аэропорта", sub: "Перрон, регистрация, клининг, грузовая, ГСМ", roles: ["airport"] },
   { go: "quiz-operator", icon: "✈️", title: "АБ эксплуатанта ВС", sub: "ПАБ авиакомпании, безопасность и досмотр ВС", roles: ["crew"] },
   { go: "quiz-manager", icon: "🎖️", title: "Управление АБ", sub: "Программы, контроль качества, SOP, кризис-планы", roles: ["manager"] },
@@ -281,6 +282,7 @@ function doUnlock() {
 function route(go) {
   track("open/" + go);
   if (go === "lessons") return renderLessons();
+  if (go === "xray") return startXray();
   if (go === "exam") return renderAttest();                       // проктор-аттестация (замена «экзамена»)
   if (go === "blitz") return startQuiz(pick(closedPool(rolePool()), 15), "Экзамен на время", null, { timed: true, secs: 20 });
   if (go === "mistakes") return startMistakes();
@@ -290,6 +292,122 @@ function route(go) {
     return startQuiz(shuffle(trimPool(DATA.quiz.filter(q => q.cat === cat))), CAT_NAMES[cat] || "Тест", cat);
   }
 }
+/* ===========================================================================
+   МОДУЛЬ «РАСПОЗНАВАНИЕ НА РЕНТГЕНЕ»
+   Сцена интроскопа → пользователь указывает запрещённый предмет (или жмёт
+   «Нарушений нет»). Проверка попадания по зонам targets в координатах viewBox.
+   =========================================================================== */
+let xr = null;   // { list, i, correct, found:Set, done:bool }
+
+function startXray() {
+  if (!window.XRAY || !XRAY.scenes.length) { toast("Модуль недоступен"); return; }
+  xr = { list: shuffle(XRAY.scenes), i: 0, correct: 0 };
+  renderXrayScene();
+}
+function renderXrayScene() {
+  const s = xr.list[xr.i];
+  xr.found = []; xr.done = false;
+  const need = (s.targets || []).length;
+  app.innerHTML = `${topbar("Распознавание на рентгене")}
+    <div class="hud">
+      <span>${t("Снимок")} ${xr.i + 1}/${xr.list.length}</span>
+      <span class="xrtask">${t(s.task)}</span>
+    </div>
+    <div class="xrwrap" id="xrwrap">
+      ${s.img ? `<img src="${s.img}" class="xrsvg" alt="">` : s.svg}
+      <div class="xrmarks" id="xrmarks"></div>
+    </div>
+    <div class="xrbar">
+      <button class="ghost" onclick="xrayHint()">💡 ${t("Подсказка")}</button>
+      <button class="ghost" onclick="xrayNone()">✅ ${t("Нарушений нет")}</button>
+    </div>
+    <div class="feedback" id="xrfb">${need ? t("Нажмите на подозрительный предмет на снимке") : ""}</div>`;
+  const wrap = $("#xrwrap");
+  wrap.onclick = e => {
+    if (xr.done) return;
+    const svg = wrap.querySelector(".xrsvg");
+    const r = svg.getBoundingClientRect();
+    // координаты клика → единицы viewBox (400×260)
+    const vx = (e.clientX - r.left) / r.width * 400;
+    const vy = (e.clientY - r.top) / r.height * 260;
+    xrayTap(vx, vy);
+  };
+}
+function xrayTap(vx, vy) {
+  const s = xr.list[xr.i], targets = s.targets || [];
+  const hit = targets.findIndex((tg, idx) =>
+    xr.found.indexOf(idx) < 0 && vx >= tg.x && vx <= tg.x + tg.w && vy >= tg.y && vy <= tg.y + tg.h);
+  if (hit >= 0) {
+    xr.found.push(hit);
+    const tg = targets[hit];
+    markBox(tg, "ok", tg.name);
+    beep(true); tgHaptic("success");
+    if (xr.found.length === targets.length) {
+      xr.correct++; addXP(8); markDaily();
+      xrayDone(`✅ <b>${t("Верно")}</b> — ${targets.map(x => x.name).join(", ")}.<br>${targets.map(x => x.why).join("<br>")}`, true);
+    } else {
+      $("#xrfb").innerHTML = `✅ ${t("Найдено")}: ${tg.name}. ${t("На снимке есть ещё нарушение — продолжайте.")}`;
+    }
+  } else {
+    beep(false); tgHaptic("error");
+    markDot(vx, vy);
+    $("#xrfb").innerHTML = `❌ ${t("Здесь ничего запрещённого. Осмотрите снимок внимательнее.")}`;
+  }
+}
+function xrayNone() {
+  if (xr.done) return;
+  const s = xr.list[xr.i], targets = s.targets || [];
+  if (!targets.length) {
+    xr.correct++; addXP(8); markDaily(); beep(true); tgHaptic("success");
+    xrayDone(`✅ <b>${t("Верно")}</b> — ${t("сумка чистая")}.<br>${s.cleanWhy || ""}`, true);
+  } else {
+    beep(false); tgHaptic("error");
+    targets.forEach((tg, i) => { if (xr.found.indexOf(i) < 0) markBox(tg, "miss", tg.name); });
+    xrayDone(`❌ <b>${t("Пропуск угрозы")}</b> — ${targets.map(x => x.name).join(", ")}.<br>${targets.map(x => x.why).join("<br>")}`, false);
+  }
+}
+function xrayHint() {
+  const s = xr.list[xr.i];
+  if (s.hint) $("#xrfb").innerHTML = `💡 ${t(s.hint)}`;
+}
+function markBox(tg, cls, label) {
+  const m = $("#xrmarks"); if (!m) return;
+  const d = document.createElement("div");
+  d.className = "xrbox " + cls;
+  d.style.left = (tg.x / 400 * 100) + "%"; d.style.top = (tg.y / 260 * 100) + "%";
+  d.style.width = (tg.w / 400 * 100) + "%"; d.style.height = (tg.h / 260 * 100) + "%";
+  d.innerHTML = `<span>${label}</span>`;
+  m.appendChild(d);
+}
+function markDot(vx, vy) {
+  const m = $("#xrmarks"); if (!m) return;
+  const d = document.createElement("div");
+  d.className = "xrdot";
+  d.style.left = (vx / 400 * 100) + "%"; d.style.top = (vy / 260 * 100) + "%";
+  m.appendChild(d);
+  setTimeout(() => d.remove(), 900);
+}
+function xrayDone(html, ok) {
+  xr.done = true;
+  const last = xr.i >= xr.list.length - 1;
+  $("#xrfb").innerHTML = `<div class="${ok ? "good" : "bad"}">${html}</div>`;
+  const bar = document.querySelector(".xrbar");
+  if (bar) bar.innerHTML = `<button class="next" onclick="${last ? "xrayResult()" : "xrayNext()"}">${last ? t("Итог") : t("Следующий снимок")} ›</button>`;
+}
+function xrayNext() { xr.i++; renderXrayScene(); }
+function xrayResult() {
+  const n = xr.list.length, pct = Math.round(xr.correct / n * 100);
+  if (pct >= 80) unlock("expert");
+  app.innerHTML = `${topbar("Распознавание на рентгене")}
+    <div class="qcard">
+      <div class="qtext">${pct >= 80 ? "🎯" : pct >= 50 ? "👍" : "📚"} ${t("Результат")}: <b>${xr.correct}/${n}</b> (${pct}%)</div>
+      <div class="why">${t("Цветовая кодировка интроскопа: оранжевый — органика (взрывчатка, жидкости, ткань), синий — металл (оружие, инструменты), зелёный — неорганика и смеси, чёрный — плотные непроницаемые объекты.")}</div>
+      <div class="src">${t("Учебная имитация снимка. Не заменяет подготовку на реальном оборудовании.")}</div>
+      <button class="next" onclick="startXray()">↻ ${t("Ещё раз")}</button>
+      <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>
+    </div>`;
+}
+
 function topbar(title) {
   tgBack(true);
   return `<div class="topbar"><button class="back" onclick="renderHome()">${t("‹ Меню")}</button><span class="ttitle">${t(title)}</span><span class="xpchip">${state.xp} XP</span></div>`;
