@@ -12,9 +12,31 @@ const CONTACT_TG = "https://t.me/Ori_gemini_bot";   // контакт/подде
 function defaultState() {
   return {
     xp: 0, totalCorrect: 0, streakBest: 0, soundOn: true, voiceOn: true, lang: "ru", org: "",
+    role: "airport",
     achievements: {}, mistakes: {}, catStats: {}, domainCorrect: {},
     daily: { day: "", streak: 0, count: 0, goal: 20 }
   };
+}
+
+/* ---------- Аудитории (роли) ----------
+   Персонал аэропорта · Экипаж и авиакомпания · Руководители служб АБ.
+   Роль определяет, какие плитки видны и из каких тем берутся экзамен/блиц. */
+const ROLE_NAMES = { airport: "Персонал аэропорта", crew: "Экипаж и АК", manager: "Руководители" };
+const ROLE_ORDER = ["airport", "crew", "manager"];
+const COMMON_CATS = ["awareness", "access", "restricted", "screening", "prohibited",
+                     "suspicious", "insider", "response", "culture", "cyber"];
+const ROLE_CATS = {
+  airport: COMMON_CATS.concat(["service"]),
+  crew:    COMMON_CATS.concat(["operator"]),
+  manager: COMMON_CATS.concat(["manager"])
+};
+function roleCats() { return ROLE_CATS[state.role] || ROLE_CATS.airport; }
+function setRole(rk) { state.role = rk; save(); renderHome(); }
+/* Банк вопросов текущей роли (для экзамена/блица/аттестации). */
+function rolePool() {
+  const cats = roleCats();
+  const pool = (DATA.quiz || []).filter(q => cats.indexOf(q.cat) >= 0);
+  return pool.length ? pool : (DATA.quiz || []);
 }
 function loadState() {
   try { return Object.assign(defaultState(), JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); }
@@ -52,7 +74,8 @@ const CAT_NAMES = {
   awareness: "Основы АБ и угрозы", access: "Пропуска и доступ", restricted: "Зоны ограниченного доступа",
   screening: "Досмотр", prohibited: "Запрещённые предметы", suspicious: "Подозрительные предметы",
   insider: "Инсайдер и соцынженерия", response: "Действия при угрозе", culture: "Культура безопасности",
-  cyber: "Киберигиена", service: "По службам аэропорта", other: "Прочее"
+  cyber: "Киберигиена", service: "По службам аэропорта",
+  operator: "АБ эксплуатанта ВС", manager: "Управление АБ", other: "Прочее"
 };
 const MENU = [
   { go: "lessons", icon: "📺", title: "Видеоуроки", sub: "Короткие ролики по процессам" },
@@ -66,11 +89,15 @@ const MENU = [
   { go: "quiz-response", icon: "🚨", title: "Действия при угрозе", sub: "Тревога, эвакуация, бомбовая угроза" },
   { go: "quiz-culture", icon: "🤝", title: "Культура безопасности", sub: "АБ — дело каждого, конфиденциальность" },
   { go: "quiz-cyber", icon: "🖥️", title: "Киберигиена", sub: "Пароли, фишинг, USB" },
-  { go: "quiz-service", icon: "🧑‍✈️", title: "По службам аэропорта", sub: "Перрон, регистрация, клининг, грузовая, ГСМ" },
+  { go: "quiz-service", icon: "🧑‍✈️", title: "По службам аэропорта", sub: "Перрон, регистрация, клининг, грузовая, ГСМ", roles: ["airport"] },
+  { go: "quiz-operator", icon: "✈️", title: "АБ эксплуатанта ВС", sub: "ПАБ авиакомпании, безопасность и досмотр ВС", roles: ["crew"] },
+  { go: "quiz-manager", icon: "🎖️", title: "Управление АБ", sub: "Программы, контроль качества, SOP, кризис-планы", roles: ["manager"] },
   { go: "exam", icon: "📝", title: "Аттестация", sub: "Проктор-экзамен · допуск экзаменатора + справка" },
   { go: "blitz", icon: "⏱️", title: "Экзамен на время", sub: "15 вопросов · таймер 20 c" },
   { go: "mistakes", icon: "🧯", title: "Работа над ошибками", sub: "" }
 ];
+/* Плитка видна, если у неё нет ограничения по ролям либо текущая роль в списке. */
+function menuForRole() { return MENU.filter(m => !m.roles || m.roles.indexOf(state.role) >= 0); }
 
 /* ───────── Управление доступностью плиток и объёмом вопросов ─────────
    Активны первые WIP_AFTER плиток, остальные помечаются «на стадии разработки»
@@ -142,6 +169,9 @@ function renderHome() {
       ${["ru", "tg", "en"].map(L => `<button class="langchip ${(state.lang || "ru") === L ? "on" : ""}" onclick="changeLang('${L}')">${LANG_NAMES[L]}</button>`).join("")}
     </div>
     <div class="brand">🛡️ <b>AvSec</b> <span>· ${t("авиационная безопасность")}</span></div>
+    <div class="roles">
+      ${ROLE_ORDER.map(rk => `<button class="rolechip ${state.role === rk ? "on" : ""}" onclick="setRole('${rk}')">${t(ROLE_NAMES[rk])}</button>`).join("")}
+    </div>
     <div class="rankcard">
       <div class="rankicon">${r.icon}</div>
       <div class="rankinfo">
@@ -158,7 +188,7 @@ function renderHome() {
     </div>
     ${licenseBanner()}
     <div class="menu">
-      ${MENU.map((m, i) => {
+      ${menuForRole().map((m, i) => {
         const cat = m.go.startsWith("quiz-") ? m.go.slice(5) : null;
         if (cat && window.AvSecLic && AvSecLic.locked(cat)) return lockedTile(m.icon, t(m.title), t(m.sub));
         return tile(m.go, m.icon, t(m.title), m.go === "mistakes"
@@ -252,7 +282,7 @@ function route(go) {
   track("open/" + go);
   if (go === "lessons") return renderLessons();
   if (go === "exam") return renderAttest();                       // проктор-аттестация (замена «экзамена»)
-  if (go === "blitz") return startQuiz(pick(closedPool(DATA.quiz), 15), "Экзамен на время", null, { timed: true, secs: 20 });
+  if (go === "blitz") return startQuiz(pick(closedPool(rolePool()), 15), "Экзамен на время", null, { timed: true, secs: 20 });
   if (go === "mistakes") return startMistakes();
   if (go.startsWith("quiz-")) {
     const cat = go.slice(5);
@@ -547,7 +577,7 @@ async function attestVerify() {
   $("#attCode").value = ""; go.disabled = false; go.textContent = lbl; $("#attCode").focus();
 }
 function startAttest() {
-  const pool = shuffle(closedPool(DATA.quiz));
+  const pool = shuffle(closedPool(rolePool()));   // вопросы по аудитории (роли)
   const list = pool.slice(0, Math.min(ATT.N, pool.length));
   if (!list.length) { toast("Нет вопросов для аттестации"); return; }
   tgBack(false);
