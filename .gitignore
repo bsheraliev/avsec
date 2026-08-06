@@ -18,3 +18,15 @@ data.src.js
 # (data.full.enc — публичный AES-шифр, он КОММИТИТСЯ; бесполезен без ключа)
 backend/_generated/
 .avsec-fullkey
+
+# Реальные рентген-снимки TIP — НИКОГДА не публиковать в открытом репозитории
+# (служебная информация ограниченного доступа + права вендоров). См. xray/README.md
+xray/*.jpg
+xray/*.jpeg
+xray/*.png
+xray/*.webp
+xray/*.gif
+xray/*.bmp
+xray/*.tif
+xray/*.tiff
+xray/scenes.json

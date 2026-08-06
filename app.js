@@ -7,6 +7,8 @@ const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
+/* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
+const APP_VERSION = "1.3.0";
 const CONTACT_TG = "https://t.me/Ori_gemini_bot";   // контакт/поддержка в Telegram
 
 function defaultState() {
@@ -208,6 +210,7 @@ function renderHome() {
     <button class="ghost danger fullrow" onclick="resetAll()">${t("↺ Сброс прогресса")}</button>
     <p class="disclaimer">${t("Учебный тренажёр на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.")}</p>
     <p class="disclaimer">© 2026 AvSec. ${t("Все права защищены. Копирование содержимого и кода без письменного разрешения правообладателя запрещено.")} <a href="./TERMS.html" style="color:inherit;text-decoration:underline">${t("Условия")}</a></p>
+    <p class="disclaimer verline">${t("Версия")} ${APP_VERSION} · ${t("вопросов")}: ${DATA.quiz.length}${window.XRAY ? " · " + t("снимков") + ": " + XRAY.scenes.length : ""}</p>
   `;
 }
 function tile(go, icon, title, sub, wip) {
@@ -297,11 +300,29 @@ function route(go) {
    Сцена интроскопа → пользователь указывает запрещённый предмет (или жмёт
    «Нарушений нет»). Проверка попадания по зонам targets в координатах viewBox.
    =========================================================================== */
-let xr = null;   // { list, i, correct, found:Set, done:bool }
+let xr = null;        // { list, i, correct, found, done }
+let _xrLocal = null;  // снимки из ./xray/scenes.json (реальные TIP, не в публичном репо)
 
-function startXray() {
+/* Подхватываем локальные снимки, если папка xray/ заполнена (см. xray/README.md).
+   На публичном сайте файла нет — модуль работает на встроенных векторных сценах. */
+async function xrayLoadLocal() {
+  if (_xrLocal !== null) return _xrLocal;
+  _xrLocal = [];
+  try {
+    const r = await fetch("./xray/scenes.json", { cache: "no-store" });
+    if (r.ok) {
+      const j = await r.json();
+      if (j && Array.isArray(j.scenes)) _xrLocal = j.scenes.filter(s => s && s.img && Array.isArray(s.targets));
+    }
+  } catch (e) {}
+  return _xrLocal;
+}
+function xrVW() { const s = xr && xr.list[xr.i]; return (s && s.vw) || 400; }
+function xrVH() { const s = xr && xr.list[xr.i]; return (s && s.vh) || 260; }
+async function startXray() {
   if (!window.XRAY || !XRAY.scenes.length) { toast("Модуль недоступен"); return; }
-  xr = { list: shuffle(XRAY.scenes), i: 0, correct: 0 };
+  const local = await xrayLoadLocal();
+  xr = { list: shuffle(XRAY.scenes.concat(local)), i: 0, correct: 0 };
   renderXrayScene();
 }
 function renderXrayScene() {
@@ -325,11 +346,11 @@ function renderXrayScene() {
   const wrap = $("#xrwrap");
   wrap.onclick = e => {
     if (xr.done) return;
-    const svg = wrap.querySelector(".xrsvg");
-    const r = svg.getBoundingClientRect();
-    // координаты клика → единицы viewBox (400×260)
-    const vx = (e.clientX - r.left) / r.width * 400;
-    const vy = (e.clientY - r.top) / r.height * 260;
+    const el = wrap.querySelector(".xrsvg");
+    const r = el.getBoundingClientRect();
+    // координаты клика → систему координат сцены (viewBox SVG либо vw/vh снимка)
+    const vx = (e.clientX - r.left) / r.width * xrVW();
+    const vy = (e.clientY - r.top) / r.height * xrVH();
     xrayTap(vx, vy);
   };
 }
@@ -374,8 +395,9 @@ function markBox(tg, cls, label) {
   const m = $("#xrmarks"); if (!m) return;
   const d = document.createElement("div");
   d.className = "xrbox " + cls;
-  d.style.left = (tg.x / 400 * 100) + "%"; d.style.top = (tg.y / 260 * 100) + "%";
-  d.style.width = (tg.w / 400 * 100) + "%"; d.style.height = (tg.h / 260 * 100) + "%";
+  const W = xrVW(), H = xrVH();
+  d.style.left = (tg.x / W * 100) + "%"; d.style.top = (tg.y / H * 100) + "%";
+  d.style.width = (tg.w / W * 100) + "%"; d.style.height = (tg.h / H * 100) + "%";
   d.innerHTML = `<span>${label}</span>`;
   m.appendChild(d);
 }
@@ -383,7 +405,7 @@ function markDot(vx, vy) {
   const m = $("#xrmarks"); if (!m) return;
   const d = document.createElement("div");
   d.className = "xrdot";
-  d.style.left = (vx / 400 * 100) + "%"; d.style.top = (vy / 260 * 100) + "%";
+  d.style.left = (vx / xrVW() * 100) + "%"; d.style.top = (vy / xrVH() * 100) + "%";
   m.appendChild(d);
   setTimeout(() => d.remove(), 900);
 }
