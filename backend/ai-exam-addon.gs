@@ -126,6 +126,7 @@ function examReport_(b) {
     var sec = Number(b.sec) || 0, mm = Math.floor(sec / 60), ss = sec % 60, sw = Number(b.switches) || 0;
     var text = "📋 Результат аттестации" + (b.reqId ? " (№" + b.reqId + ")" : "") + "\n" +
       "ФИО: " + (b.name || "—") + "\n" +
+      "Организация: " + (b.org || "—") + "\n" +
       "Подразделение: " + (b.unit || "—") + "\n" +
       "Предмет: " + (b.subject || "—") + (b.catName ? " · " + b.catName : "") + "\n" +
       "Результат: " + b.pct + "% (" + b.ok + "/" + b.total + ") — " + (b.pass ? "СДАН ✅" : "НЕ СДАН ❌") + "\n" +
@@ -150,7 +151,7 @@ function resultsSheet_() {
     ss = SpreadsheetApp.create("Тренажёры — результаты аттестаций");
     var sh = ss.getSheets()[0]; sh.setName("Результаты");
     sh.appendRow(["Дата и время", "ФИО", "Подразделение", "Предмет", "Категория",
-      "Результат %", "Верно", "Всего", "Статус", "Выходов из приложения", "Время (сек)", "№ запроса"]);
+      "Результат %", "Верно", "Всего", "Статус", "Выходов из приложения", "Время (сек)", "№ запроса", "Организация"]);
     sh.setFrozenRows(1);
     props.setProperty("RESULTS_SHEET_ID", ss.getId());
   }
@@ -162,15 +163,17 @@ function logResult_(b) {
     var now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm");
     sh.appendRow([now, b.name || "", b.unit || "", b.subject || "", b.catName || "",
       Number(b.pct) || 0, Number(b.ok) || 0, Number(b.total) || 0, b.pass ? "СДАН" : "НЕ СДАН",
-      Number(b.switches) || 0, Number(b.sec) || 0, b.reqId || ""]);
+      Number(b.switches) || 0, Number(b.sec) || 0, b.reqId || "", b.org || ""]);   // M: организация/компания
     return true;
   } catch (e) { return false; }
 }
 function showResultsSheet() { var ss = resultsSheet_(); Logger.log("Таблица результатов: " + ss.getUrl()); }
 
 /* ---------- Общий дашборд (вкладка «Дашборд») по всем аттестациям ----------
-   Запустить в редакторе ОДИН раз (и повторно, если хотите пересобрать оформление).
-   Сводка живая — обновляется формулами QUERY по мере новых результатов. */
+   ⚠️ НЕ ЗАПУСКАЙТЕ здесь. Боевой дашборд (с фильтром периода, разбивкой по
+   приложениям и по организациям столбца M) собирается в бэкенде СУБП
+   «subp trainer ai check» → функция buildDashboard. Эта версия проще и при
+   запуске ПЕРЕЗАПИШЕТ оформление боевого дашборда. Оставлена только для истории. */
 function buildDashboard() {
   var ss = SpreadsheetApp.openById("1GLfQZ_n3gnl6DJnRmJclB745Ai1x9R0k5366hqIbKQ4"); // общая таблица результатов
   var old = ss.getSheetByName("Дашборд");
@@ -222,6 +225,7 @@ function notifyExaminer_(b, code, reqId) {
   if (!token || !chat) return false;
   var text = "🎓 Запрос на аттестацию (№" + reqId + ")\n" +
     "ФИО: " + (b.name || "—") + "\n" +
+    "Организация: " + (b.org || "—") + "\n" +
     "Подразделение: " + (b.unit || "—") + "\n" +
     "Предмет: " + (b.subject || "—") + (b.catName ? " · " + b.catName : "") + "\n\n" +
     "🔑 Код для кандидата: " + code + "\n" +
