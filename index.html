@@ -433,17 +433,37 @@ html,body{margin:0;padding:0;background:
 .attsw{color:var(--red);font-weight:700;font-size:12px}
 body.exam-lock{-webkit-user-select:none;user-select:none}
 body.exam-lock .opt,body.exam-lock .qtext{-webkit-touch-callout:none}
+
+/* ----- Проводник (инструкция): ссылки и слой поверх приложения ----- */
+.guidelink{display:block;width:100%;background:transparent;border:1px dashed var(--line);color:var(--green);
+  border-radius:12px;padding:10px 12px;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+  margin:0 0 14px;text-align:center}
+.guidelink:active{transform:scale(.98)}
+.qcard .guidelink,.unlock .guidelink{margin:12px 0 0}
+.guide-ov{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column}
+.guide-ov[hidden]{display:none}
+.guide-bar{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;background:var(--panel);
+  border-bottom:1px solid var(--line);padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px}
+.guide-bar span{flex:1;min-width:0}
+.guide-bar .ghost{padding:8px 12px;font-size:13px}
+.guide-ov iframe{flex:1;width:100%;min-height:0;border:0;background:var(--bg)}
+body.guide-open{overflow:hidden}
 </style>
 </head>
 <body>
 <div id="toasts"></div>
 <div id="app"></div>
+<!-- ПРОВОДНИК: слой поверх приложения — экран под ним не перерисовывается, данные не теряются -->
+<div id="guideOv" class="guide-ov" role="dialog" aria-modal="true" aria-label="Инструкция" hidden>
+  <div class="guide-bar"><span id="guideTitle">Инструкция</span><button type="button" id="guideClose" class="ghost">✕ Закрыть</button></div>
+  <iframe id="guideFrame" title="Проводник по AvSec"></iframe>
+</div>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script src="./i18n.js"></script>
 <script src="./data.js"></script>
 <script src="./xray.js"></script>
 <script src="./license.js"></script>
 <script src="./app.js"></script>
-<script src="feedback.js" data-app="avsec" data-version="v26" defer></script>
+<script src="feedback.js" data-app="avsec" data-version="v27" defer></script>
 </body>
 </html>

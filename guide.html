@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<!-- СОБРАНО из guide.src.html командой «node build-guide.mjs» — не править руками -->
+<html lang="ru" data-site data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06121a">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+html{padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+body{margin:0;font-size:14px}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Проводник по AvSec</title>
+<style>
+/* Layout: centered wizard — track tabs, progress rail, phone-mock stage beside step text, prev/next. */
+:root{
+  --bg:#f0f5f7; --surface:#ffffff; --surface-2:#e5edf1; --line:#cddbe2;
+  --fg:#0f1f28; --muted:#557080; --accent:#0a7c68; --accent-2:#0b6486; --accent-ink:#ffffff;
+  --warn:#c0564d; --ok:#0a7c68;
+  /* mock app screen — always the real AvSec dark palette, in both themes */
+  --app-bg:#06121a; --app-panel:#0e2632; --app-panel2:#13313f; --app-line:#1d4254;
+  --app-fg:#e8f4f8; --app-muted:#8fb3c2; --app-accent:#27e0a0; --app-blue:#46c2ff;
+  --app-amber:#ffc14d; --app-ink:#04161d;
+  --r:16px; --r-sm:11px;
+  --font-display:'Bricolage Grotesque',system-ui,sans-serif;
+  --font-body:'Hanken Grotesk',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){
+  --bg:#06121a; --surface:#0c1f29; --surface-2:#11303d; --line:#1d4254;
+  --fg:#e8f4f8; --muted:#8fb3c2; --accent:#27e0a0; --accent-2:#46c2ff; --accent-ink:#04161d;
+  --warn:#ff7d72; --ok:#27e0a0; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#06121a; --surface:#0c1f29; --surface-2:#11303d; --line:#1d4254;
+  --fg:#e8f4f8; --muted:#8fb3c2; --accent:#27e0a0; --accent-2:#46c2ff; --accent-ink:#04161d;
+  --warn:#ff7d72; --ok:#27e0a0; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);line-height:1.5;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding-inline:18px;padding-block:22px 40px}
+.embedded .wrap{padding-block-end:84px}   /* внутри приложения: место под его плавающую кнопку */
+.back{display:inline-block;margin-bottom:14px;color:var(--accent);font-weight:600;font-size:14px;
+  text-decoration:none}
+.back:hover{text-decoration:underline}
+.back:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+
+/* ---- header ---- */
+.top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(145deg,var(--accent),var(--accent-2));
+  display:grid;place-items:center;flex:none;box-shadow:0 4px 14px rgba(10,124,104,.3)}
+.logo svg{width:22px;height:22px;fill:var(--accent-ink)}
+.ttl{font-family:var(--font-display);font-weight:700;font-size:clamp(19px,4.6vw,24px);
+  letter-spacing:-.02em;line-height:1.1;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.theme{margin-left:auto;flex:none;border:1px solid var(--line);background:var(--surface);
+  color:var(--muted);width:38px;height:38px;border-radius:11px;cursor:pointer;font-size:17px;
+  display:grid;place-items:center}
+.theme:hover{color:var(--fg);border-color:var(--accent)}
+
+/* ---- track tabs ---- */
+.tabs{display:flex;gap:8px;background:var(--surface-2);padding:5px;border-radius:14px;
+  border:1px solid var(--line);margin-bottom:18px}
+.tab{flex:1;border:0;background:transparent;color:var(--muted);font-family:var(--font-body);
+  font-weight:600;font-size:14.5px;padding:10px 8px;border-radius:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;transition:all .18s}
+.tab b{font-weight:700}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--fg);
+  box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.tab .ic{font-size:16px}
+
+/* ---- progress ---- */
+.rail{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.dots{display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
+.dot{width:24px;height:6px;border-radius:99px;background:var(--line);border:0;padding:0;cursor:pointer;
+  transition:background .2s,width .2s}
+.dot.done{background:var(--accent)}
+.dot.now{background:var(--accent);width:38px}
+.count{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;
+  font-family:var(--font-mono)}
+
+/* ---- stage ---- */
+.stage{display:grid;grid-template-columns:230px 1fr;gap:26px;align-items:center;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:24px;min-height:430px}
+@media (max-width:620px){ .stage{grid-template-columns:1fr;gap:18px;padding:18px;text-align:center} }
+
+.stepwrap{animation:fade .34s ease both}
+.reduce .stepwrap{animation:none}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
+  font-weight:700;margin-bottom:8px}
+.stitle{font-family:var(--font-display);font-weight:700;font-size:clamp(20px,5vw,26px);
+  letter-spacing:-.02em;line-height:1.12;text-wrap:balance;margin:0 0 10px}
+.sdesc{font-size:15.5px;color:var(--fg);margin:0 0 14px;max-width:46ch}
+@media (max-width:620px){ .sdesc{margin-inline:auto} }
+.note{display:flex;gap:9px;align-items:flex-start;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:11px 13px;font-size:13.5px;color:var(--muted);text-align:left;
+  max-width:46ch}
+@media (max-width:620px){ .note{margin-inline:auto} }
+.note.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));
+  background:color-mix(in srgb,var(--warn) 9%,var(--surface))}
+.note .nic{flex:none;font-size:15px;line-height:1.3}
+
+/* ---- phone mock ---- */
+.phone{justify-self:center;width:218px;flex:none}
+@media (max-width:620px){ .phone{width:200px} }
+.frame{position:relative;background:#02080c;border-radius:30px;padding:9px;
+  box-shadow:0 12px 34px rgba(0,0,0,.28),inset 0 0 0 1.5px #0b1c26}
+.frame::before{content:"";position:absolute;top:11px;left:50%;transform:translateX(-50%);
+  width:62px;height:5px;border-radius:99px;background:#0b1c26;z-index:3}
+.scr{background:var(--app-bg);border-radius:22px;overflow:hidden;height:378px;position:relative;
+  color:var(--app-fg);font-size:12px;display:flex;flex-direction:column}
+.scr-body{padding:4px 12px 12px;flex:1;overflow:hidden;display:flex;flex-direction:column;gap:8px}
+.scr-lead{font-size:9.5px;color:var(--app-muted);line-height:1.45}
+/* главный экран AvSec */
+.a-lang{display:flex;gap:4px;justify-content:center;padding:17px 10px 2px}
+.a-chip{font-size:8px;font-weight:600;border:1px solid var(--app-line);background:var(--app-panel);
+  color:var(--app-muted);border-radius:99px;padding:3px 8px;white-space:nowrap}
+.a-chip.on{border-color:var(--app-accent);color:var(--app-accent)}
+.a-brand{text-align:center;font-size:8.5px;color:var(--app-muted)}
+.a-brand b{color:var(--app-accent);font-size:11px}
+.a-roles{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
+.a-rank{display:flex;gap:8px;align-items:center;background:var(--app-panel);border:1px solid var(--app-line);
+  border-radius:12px;padding:8px 10px;text-align:left}
+.a-rank .ri{font-size:22px;line-height:1}
+.a-rank b{font-size:10.5px;display:block}
+.a-rank small{font-size:8px;color:var(--app-muted);display:block}
+.a-tiles{display:grid;grid-template-columns:1fr 1fr;gap:6px;text-align:left}
+.a-tile{background:var(--app-panel);border:1px solid var(--app-line);border-radius:11px;padding:7px 8px;min-width:0}
+.a-tile .ti{font-size:14px;display:block;line-height:1.2}
+.a-tile b{font-size:9px;display:block;line-height:1.2;margin-top:2px}
+.a-tile small{font-size:7.5px;color:var(--app-muted);display:block;line-height:1.25;margin-top:2px}
+.a-tile.hl,.mrow.hl{border-color:var(--app-accent);box-shadow:0 0 0 1.5px color-mix(in srgb,var(--app-accent) 55%,transparent)}
+.a-tile.lock{opacity:.6;border-style:dashed}
+/* внутренние экраны */
+.a-top{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:17px 12px 8px;font-size:9px}
+.a-top .bk{color:var(--app-muted);border:1px solid var(--app-line);border-radius:8px;padding:3px 6px;white-space:nowrap;flex:none}
+.a-top b{font-size:10.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.a-top .xp{color:var(--app-accent);font-weight:700;font-size:8.5px;white-space:nowrap}
+.mcard{background:var(--app-panel);border:1px solid var(--app-line);border-radius:12px;padding:10px}
+.mrow{display:flex;align-items:center;gap:9px;background:var(--app-panel);border:1px solid var(--app-line);
+  border-radius:11px;padding:8px 10px;text-align:left}
+.mrow .mi{width:22px;height:22px;border-radius:7px;background:var(--app-panel2);display:grid;
+  place-items:center;flex:none;font-size:12px}
+.mrow b{font-size:10px;font-weight:600}
+.mrow small{font-size:8px;color:var(--app-muted);display:block}
+.a-opt{border:1px solid var(--app-line);background:var(--app-panel2);border-radius:10px;padding:7px 9px;
+  font-size:9.5px;text-align:left}
+.a-opt.ok{border-color:var(--app-accent);color:var(--app-accent);font-weight:600}
+.a-why{font-size:8.5px;color:var(--app-muted);border-left:2px solid var(--app-accent);padding-left:7px;
+  line-height:1.4;text-align:left}
+.mfield{font-size:8.5px;color:var(--app-muted);text-align:left}
+.inp{margin-top:4px;background:#0b1f2a;border:1px solid var(--app-line);
+  border-radius:9px;padding:8px 9px;font-size:9.5px;color:var(--app-fg);display:flex;
+  align-items:center;justify-content:space-between}
+.inp.sel{border-color:var(--app-accent)}
+.inp.ph{color:var(--app-muted)}
+.mbtn{background:linear-gradient(135deg,var(--app-accent),var(--app-blue));color:var(--app-ink);
+  text-align:center;font-weight:700;font-size:11px;padding:10px;border-radius:11px}
+.mbtn.ghost{background:var(--app-panel);border:1px solid var(--app-line);color:var(--app-fg);font-weight:600}
+.mhead{display:flex;justify-content:space-between;align-items:center;font-size:9px;color:var(--app-muted)}
+.chip{background:var(--app-panel2);border:1px solid var(--app-line);border-radius:99px;
+  padding:3px 8px;font-size:8.5px;font-weight:600;white-space:nowrap}
+.chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,var(--app-line))}
+.chip.ok{color:var(--app-accent)}
+.chip.amber{color:var(--app-amber)}
+.bar{height:5px;background:var(--app-panel2);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--app-accent);border-radius:99px}
+.licbar{border:1px solid var(--app-amber);background:rgba(255,193,77,.1);border-radius:11px;
+  padding:7px 9px;font-size:8.5px;line-height:1.4;text-align:left;display:flex;gap:6px;align-items:center}
+.licbar.ok{border-color:var(--app-accent);background:rgba(39,224,160,.1);font-weight:600}
+.licbar .lb{background:var(--app-amber);color:var(--app-ink);border-radius:7px;padding:4px 7px;
+  font-weight:700;font-size:8px;white-space:nowrap}
+.dict{font-family:var(--font-mono);letter-spacing:.3em;font-weight:700}
+/* рентген-снимок */
+.xr{height:124px;border-radius:10px;background:#03080b;border:1px solid var(--app-line);position:relative;overflow:hidden}
+.xr i{position:absolute;display:block;border-radius:5px;opacity:.85}
+.xr .bag{left:8%;top:12%;right:8%;bottom:11%;border:2px solid #2f6f8a;border-radius:12px;opacity:.7}
+.xr .o1{left:14%;top:26%;width:26%;height:26%;background:#e08a2c}
+.xr .o2{left:46%;top:22%;width:20%;height:40%;background:#3fb24f;border-radius:9px}
+.xr .o3{left:16%;top:62%;width:36%;height:11%;background:#3f7fe0}
+.xr .knife{left:58%;top:70%;width:26%;height:8%;background:#5aa7ff;border-radius:2px 9px 9px 2px;position:absolute}
+/* telegram bubble */
+.tg{background:#17212b;border-radius:12px;padding:10px 11px;font-size:9.5px;line-height:1.5;
+  border:1px solid #223344;text-align:left}
+.tg .tgh{color:#6ab3f3;font-weight:700;font-size:9.5px;margin-bottom:3px}
+.tg b{color:#eaf3ef}
+.tg .k{color:var(--app-accent);font-weight:700}
+.speech{background:var(--app-accent);color:var(--app-ink);border-radius:12px;border-bottom-left-radius:3px;
+  padding:9px 11px;font-size:10.5px;font-weight:600;align-self:flex-start;max-width:85%;text-align:left}
+.bigpct{font-family:var(--font-display);font-weight:700;font-size:38px;color:var(--app-accent);
+  text-align:center;line-height:1}
+/* tap pulse — стоит на своём элементе */
+.tap{position:absolute;width:30px;height:30px;border-radius:99px;border:2px solid var(--app-accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--app-accent) 30%,transparent);
+  animation:tap 1.5s ease-out infinite;pointer-events:none;z-index:4}
+.reduce .tap{animation:none}
+.mrow,.mfield,.mbtn,.a-chip,.a-tile,.licbar{position:relative}
+.mbtn .tap,.licbar .tap{border-color:var(--app-fg);box-shadow:0 0 0 3px rgba(232,244,248,.3)}
+@keyframes tap{0%{transform:scale(.6);opacity:1}70%{transform:scale(1.25);opacity:.25}100%{transform:scale(1.35);opacity:0}}
+
+/* ---- nav ---- */
+.nav{display:flex;align-items:center;gap:12px;margin-top:18px}
+.btn{font-family:var(--font-body);font-weight:700;font-size:15px;border-radius:12px;padding:13px 20px;
+  cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--fg);transition:all .15s}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);margin-left:auto}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.primary.done{background:var(--surface);color:var(--accent);border-color:var(--accent)}
+.btn:focus-visible,.tab:focus-visible,.dot:focus-visible,.theme:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.foot{margin-top:22px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7}
+.foot code{font-family:var(--font-mono);background:var(--surface-2);border:1px solid var(--line);
+  border-radius:6px;padding:1px 6px;font-size:11.5px;color:var(--fg);overflow-wrap:anywhere}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap">
+
+<div class="wrap">
+  <a class="back" id="back" href="https://bsheraliev.github.io/avsec/" target="_blank" rel="noopener">Открыть приложение ↗</a>
+  <header class="top">
+    <span class="logo"><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6z"/></svg></span>
+    <div>
+      <div class="ttl">Как пользоваться AvSec</div>
+      <div class="sub">Тренажёр авиационной безопасности · пошагово</div>
+    </div>
+    <button class="theme" id="theme" aria-label="Сменить тему">◐</button>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Для кого">
+    <button class="tab" id="tab-learner" role="tab" aria-selected="true" aria-controls="stage"><span class="ic">🛡️</span> Я <b>учусь</b></button>
+    <button class="tab" id="tab-examiner" role="tab" aria-selected="false" aria-controls="stage"><span class="ic">✈️</span> Я <b>принимаю</b></button>
+  </div>
+
+  <div class="rail">
+    <div class="dots" id="dots"></div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <section class="stage" id="stage">
+    <div class="phone"><div class="frame"><div class="scr" id="screen"></div></div></div>
+    <div class="stepwrap" id="stepwrap">
+      <div class="eyebrow" id="eyebrow"></div>
+      <h2 class="stitle" id="stitle"></h2>
+      <p class="sdesc" id="sdesc"></p>
+      <div id="noteSlot"></div>
+    </div>
+  </section>
+
+  <div class="nav">
+    <button class="btn" id="prev">← Назад</button>
+    <button class="btn primary" id="next">Дальше →</button>
+  </div>
+
+  <p class="foot">
+    Приложение: <code>bsheraliev.github.io/avsec</code> · в Telegram: <code>@AvSecApp_bot</code><br>
+    Эта инструкция: <code>bsheraliev.github.io/avsec/guide.html</code> — открывается по ссылке без входа, в том числе на телефоне.
+  </p>
+</div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+function tap(pos){return `<span class="tap" style="${pos||'right:8px;top:50%;margin-top:-15px'}"></span>`;}
+function body(inner){return `<div class="scr-body">${inner}</div>`;}
+function inner(title,xp){return `<div class="a-top"><span class="bk">‹ Меню</span><b>${title}</b><span class="xp">${xp===undefined?'120 XP':xp}</span></div>`;}
+/* шапка главного экрана: языки, бренд, роли (role — какая выбрана, tapOn — где кружок) */
+function home(role,tapOn){
+  const L=['Рус','Тоҷикӣ','Eng'].map((x,k)=>`<span class="a-chip ${k===0?'on':''}">${x}${tapOn==='lang'&&k===1?tap('left:50%;top:50%;margin:-15px 0 0 -15px'):''}</span>`).join('');
+  const R=[['airport','Персонал аэропорта'],['crew','Экипаж и АК'],['manager','Руководители']]
+    .map(r=>`<span class="a-chip ${r[0]===role?'on':''}">${r[1]}${tapOn==='role'&&r[0]===role?tap('left:50%;top:50%;margin:-15px 0 0 -15px'):''}</span>`).join('');
+  return `<div class="a-lang">${L}</div><div class="a-brand">🛡️ <b>AvSec</b> · авиационная безопасность</div>`+
+    body(`<div class="a-roles">${R}</div>`+'%%');
+}
+function tile(icon,title,sub,cls,withTap){return `<div class="a-tile ${cls||''}"><span class="ti">${icon}</span><b>${title}</b><small>${sub}</small>${withTap?tap():''}</div>`;}
+const RANK=`<div class="a-rank"><span class="ri">🪪</span><div><b>Новичок</b><small>120 XP · до следующего ранга 80 XP</small><div class="bar" style="margin-top:4px"><i style="width:60%"></i></div></div></div>`;
+
+const TRACKS={
+learner:[
+ {eye:'Шаг 1',t:'Откройте приложение',d:'Зайдите по ссылке или через бота @AvSecApp_bot в Telegram. Тренажёр работает без интернета и ставится на телефон как обычное приложение.',
+  note:['🌐','Язык переключается кнопками сверху: русский, таджикский, английский.'],
+  scr:home('airport','lang').replace('%%',RANK+`<div class="a-tiles">${tile('📺','Видеоуроки','Короткие ролики')}${tile('ℹ️','Основы АБ и угрозы','Что такое АБ')}${tile('🪪','Пропуска и доступ','Бейдж, сопровождение')}${tile('🚧','Зоны огр. доступа','Правила в ЗОД')}</div>`)},
+ {eye:'Шаг 2',t:'Выберите свою роль',d:'Персонал аэропорта, экипаж и авиакомпания или руководители. От роли зависят темы в меню и вопросы аттестации.',
+  note:['👥','Роль можно сменить в любой момент — прогресс сохранится.'],
+  scr:home('crew','role').replace('%%',RANK+`<div class="a-tiles">${tile('📺','Видеоуроки','Короткие ролики')}${tile('✈️','АБ эксплуатанта ВС','ПАБ авиакомпании','hl')}${tile('🛂','Досмотр','Зачем досматривают')}${tile('🚫','Запрещённые предметы','Оружие, ЖГА')}</div>`)},
+ {eye:'Шаг 3',t:'Начните с видеоуроков',d:'Восемь коротких роликов по главным ситуациям: подозрительный предмет, проход «хвостом», тревога и эвакуация. После них вопросы идут легче.',
+  scr:home('airport').replace('%%',`<div class="a-tiles">${tile('📺','Видеоуроки','Короткие ролики по процессам','hl',true)}${tile('ℹ️','Основы АБ и угрозы','Что такое АБ, АНВ')}${tile('🪪','Пропуска и доступ','Бейдж, проход «хвостом»')}${tile('🚧','Зоны огр. доступа','Правила поведения в ЗОД')}${tile('🛂','Досмотр','Что нельзя проносить')}${tile('🚫','Запрещённые предметы','Оружие, ЖГА')}</div>`)},
+ {eye:'Шаг 4',t:'Проходите темы',d:'Нажмите плитку темы и отвечайте на вопросы. После каждого ответа — короткое пояснение. За верные ответы растут очки и ранг.',
+  note:['🎯','Дневная цель — 20 вопросов. Ошибки собираются в «Работу над ошибками».'],
+  scr:inner('Пропуска и доступ')+body(`<div class="mhead"><span>Вопрос 3 / 12</span><span class="chip ok">+10 XP</span></div><div class="bar"><i style="width:25%"></i></div>
+   <div class="mcard" style="font-size:10px;line-height:1.45;text-align:left">Коллега просит пройти за вами по вашему пропуску. Ваши действия?</div>
+   <div class="a-opt">Пропустить, он же свой</div>
+   <div class="a-opt ok">✓ Отказать и сообщить в службу АБ</div>
+   <div class="a-opt">Пропустить, но проследить</div>
+   <div class="a-why">Проход «хвостом» запрещён: каждый проходит по своему пропуску.</div>`)},
+ {eye:'Шаг 5',t:'Откройте полный курс',d:'В демо часть тем под замком. Нажмите «Ввести код», введите код вашей организации и «Разблокировать» — откроются все темы.',
+  note:['🔑','Код выдаёт ваша организация. Вводится один раз, потом курс работает без интернета до конца срока лицензии.'],
+  scr:inner('Полный доступ')+body(`<div style="text-align:center;font-size:28px;line-height:1.1">🛡️🔓</div>
+   <div style="text-align:center;font-weight:700;font-size:11.5px">Полный курс AvSec</div>
+   <div class="scr-lead" style="text-align:center">175 вопросов по 11 темам. Доступ выдаётся организации по лицензии.</div>
+   <div class="inp sel" style="justify-content:center;font-family:var(--font-mono);letter-spacing:.12em">AVSEC-48213</div>
+   <div class="mbtn">Разблокировать${tap()}</div>
+   <div class="scr-lead" style="text-align:center">Нет кода? Обратитесь к вашей организации.</div>`)},
+ {eye:'Шаг 6',t:'Тренируйте глаз на рентгене',d:'На снимке интроскопа нажмите на запрещённый предмет. Если на снимке всё чисто — «Нарушений нет».',
+  note:['💡','Снимок можно смотреть в цвете, чёрно-белым и в негативе. Есть подсказка.'],
+  scr:inner('Распознавание на рентгене')+body(`<div class="mhead"><span>Снимок 2/10</span><span class="chip amber">Найдите предмет</span></div>
+   <div class="xr"><i class="bag"></i><i class="o1"></i><i class="o2"></i><i class="o3"></i><span class="knife">${tap('left:50%;top:50%;margin:-15px 0 0 -15px')}</span></div>
+   <div style="display:flex;gap:5px;justify-content:center"><span class="a-chip on">Цвет</span><span class="a-chip">Ч/Б</span><span class="a-chip">Негатив</span></div>
+   <div style="display:flex;gap:6px"><div class="mbtn ghost" style="flex:1;font-size:9px;padding:8px 4px">💡 Подсказка</div><div class="mbtn ghost" style="flex:1;font-size:9px;padding:8px 4px">✅ Нарушений нет</div></div>`)},
+ {eye:'Шаг 7',t:'Проверьте себя',d:'«Экзамен на время» — 15 вопросов, 20 секунд на каждый. «Работа над ошибками» возвращает вопросы, в которых вы ошиблись.',
+  scr:home('airport').replace('%%',`<div class="a-tiles">${tile('🩻','Распознавание на рентгене','Снимок интроскопа')}${tile('🧑‍✈️','По службам аэропорта','Перрон, регистрация')}${tile('📝','Аттестация','Проктор-экзамен')}${tile('⏱️','Экзамен на время','15 вопросов · таймер 20 c','hl',true)}${tile('🧯','Работа над ошибками','4 на повторение','hl')}</div>`)},
+ {eye:'Шаг 8',t:'Аттестация: введите данные',d:'Откройте плитку «Аттестация». Введите ФИО, выберите организацию из списка, укажите подразделение и нажмите «Запросить допуск».',
+  note:['🔒','Экзаменатору сразу придёт персональный код. Без него аттестация не начнётся.'],
+  scr:inner('Аттестация')+body(`<div class="mcard" style="display:flex;flex-direction:column;gap:7px">
+   <div class="scr-lead" style="text-align:left">🎓 Проктор-экзамен · допуск экзаменатора</div>
+   <div class="inp">Каримов Рустам Алиевич</div>
+   <div class="mfield" style="margin-top:-4px"><div class="inp sel">Международный аэропорт Душанбе ▾</div>${tap('right:8px;bottom:0')}</div>
+   <div class="inp">Служба перронного контроля</div>
+   <div class="mbtn">Запросить допуск</div></div>
+   <div class="mbtn ghost" style="font-size:9.5px;padding:8px">📋 Журнал аттестаций</div>`)},
+ {eye:'Шаг 9',t:'Введите код и сдавайте',d:'Экзаменатор продиктует код, он действует 15 минут. Дальше 20 вопросов: 15 минут на всё и 45 секунд на вопрос. Проходной балл — 75%.',
+  note:['⚠️','Не выходите из приложения и не копируйте текст: уходы фиксируются и видны экзаменатору.',true],
+  scr:inner('Аттестация')+body(`<div class="tg"><div class="tgh">Экзаменатор</div>Ваш код — <b>4 8 2 7</b></div>
+   <div class="mcard" style="display:flex;flex-direction:column;gap:7px">
+   <div class="scr-lead" style="text-align:left">Запрос <b style="color:var(--app-fg)">№R482</b> отправлен экзаменатору. Получите код и введите ниже:</div>
+   <div class="inp sel" style="justify-content:center;letter-spacing:.3em;font-family:var(--font-mono)">4827</div>
+   <div class="mbtn">Начать аттестацию${tap()}</div></div>
+   <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"><span class="chip amber">⏱ 15:00</span><span class="chip amber">⏳ 45 с</span><span class="chip warn">⚠ уходов: 0</span></div>`)},
+ {eye:'Готово',t:'Результат и справка',d:'Сразу видите результат. Справку о прохождении можно распечатать или сохранить в PDF.',
+  note:['📤','Результат сам уходит экзаменатору в Telegram и в общую таблицу — пересылать ничего не нужно.'],
+  scr:inner('Аттестация')+body(`<div class="bigpct">85%</div>
+   <div style="text-align:center"><span class="chip ok" style="font-size:10.5px;padding:5px 12px">✓ Аттестация пройдена</span></div>
+   <div class="scr-lead" style="text-align:center">Правильно 17 из 20 · время 9:40</div>
+   <div class="mcard" style="text-align:center"><div style="font-size:20px">🛡️</div><div style="font-size:7.5px;letter-spacing:.14em;color:var(--app-muted)">СПРАВКА О ПРОХОЖДЕНИИ</div>
+   <b style="font-size:10.5px;display:block;margin-top:3px">Каримов Рустам Алиевич</b><small style="font-size:8px;color:var(--app-muted)">МА Душанбе · Служба перронного контроля</small></div>
+   <div class="mbtn">🖨 Печать / PDF</div>`)}
+],
+examiner:[
+ {eye:'Подготовка',t:'Раздайте ссылку и код организации',d:'Отправьте сотрудникам ссылку на приложение и код организации. С кодом у них открывается полный курс вместо демо.',
+  note:['🏢','Код организации выдаёт владелец приложения. Срок действия виден на главном экране после ввода кода.'],
+  scr:home('airport').replace('%%',`<div class="licbar"><span style="flex:1">🔒 Демо-версия. Полный курс — по коду организации.</span><span class="lb">Ввести код</span>${tap('right:12px;top:50%;margin-top:-15px')}</div>
+   <div class="licbar ok">✅ Полный доступ · МА Душанбе · до 2027-07-15</div>
+   <div class="a-tiles">${tile('📺','Видеоуроки','Короткие ролики')}${tile('📝','Аттестация','Проктор-экзамен')}</div>
+   <div class="mbtn ghost" style="font-size:9.5px;padding:8px">📨 Поделиться с коллегой</div>`)},
+ {eye:'Один раз',t:'Подключение к Telegram',d:'Коды допуска и результаты приходят экзаменатору в Telegram. Бот подключается один раз — это настраивает владелец, вам ничего делать не нужно.',
+  note:['✅','Если коды и результаты уже приходят — всё настроено, переходите к следующему шагу.'],
+  scr:inner('Экзаменатор','')+body(`<div class="mcard" style="text-align:center"><div style="font-size:30px">🤖</div><b style="font-size:11px">Бот экзаменатора</b><div style="font-size:9px;color:var(--app-muted);margin-top:3px">подключён</div></div>
+   <div class="tg"><div class="tgh">Бот-экзаменатор</div>Готов принимать запросы на аттестацию 🛡️</div>
+   <div class="scr-lead" style="margin-top:auto">Коды и результаты приходят сюда, в Telegram.</div>`)},
+ {eye:'Шаг 1',t:'Вам приходит запрос',d:'Когда сотрудник нажимает «Запросить допуск», в Telegram приходит запрос: ФИО, организация, подразделение и персональный код.',
+  scr:inner('Экзаменатор','')+body(`<div class="tg"><div class="tgh">🎓 Запрос на аттестацию (№R482)</div>
+   ФИО: <b>Каримов Рустам Алиевич</b><br>Организация: <b>МА Душанбе</b><br>Подразделение: <b>Служба перронного контроля</b><br>Предмет: <b>AvSec · Авиационная безопасность</b><br><br>🔑 Код для кандидата: <span class="k">4827</span><br><span style="color:#8aa0b5">(действует 15 минут)</span></div>`)},
+ {eye:'Шаг 2',t:'Продиктуйте код',d:'Назовите сотруднику код из сообщения. Он одноразовый и действует 15 минут — после ввода аттестация начнётся.',
+  note:['🔑','Один код — одна аттестация. На новую попытку придёт новый код.'],
+  scr:inner('Экзаменатор','')+body(`<div class="tg"><div class="tgh">🎓 Запрос на аттестацию (№R482)</div>Каримов Рустам Алиевич · МА Душанбе<br>🔑 Код: <span class="k">4827</span></div>
+   <div class="speech">«Ваш код — <span class="dict">4 8 2 7</span>»</div>
+   <div class="scr-lead" style="margin-top:auto">Сотрудник вводит код у себя и начинает аттестацию.</div>`)},
+ {eye:'Шаг 3',t:'Получаете результат',d:'Как только сотрудник закончил, приходит результат: балл, сдан или не сдан, время и число выходов из приложения.',
+  note:['⚠️','«Выходов из приложения» больше нуля — сотрудник сворачивал аттестацию. Повод присмотреться.',true],
+  scr:inner('Экзаменатор','')+body(`<div class="tg"><div class="tgh">📋 Результат аттестации (№R482)</div>
+   ФИО: <b>Каримов Рустам Алиевич</b><br>Организация: <b>МА Душанбе</b><br>Предмет: <b>AvSec · Авиационная безопасность</b><br>Результат: <b>85% (17/20)</b> — <span class="k">СДАН ✅</span><br>Время: <b>9:40</b><br>Выходов из приложения: <b>0</b></div>`)},
+ {eye:'Сводка',t:'Все результаты — в таблице',d:'Каждая аттестация попадает в общую Google-таблицу и на дашборд: сводка по приложениям и по организациям.',
+  note:['📊','Отдельно подсвечиваются аттестации с уходами со вкладки — подозрение на списывание.'],
+  scr:inner('Дашборд','')+body(`<div class="mcard" style="padding:9px"><div class="mhead" style="margin-bottom:6px"><b style="color:var(--app-fg)">Сводка</b><span>всё время</span></div>
+   <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span style="color:var(--app-muted)">Сдано</span><b>17 / 23</b></div>
+   <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span style="color:var(--app-muted)">Средний балл</span><b>79.8</b></div>
+   <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span style="color:var(--warn)">С уходами</span><b style="color:var(--warn)">6 ⚠</b></div></div>
+   <div class="mcard" style="padding:9px"><div style="font-size:9px;color:var(--app-muted);margin-bottom:5px;text-align:left">По организациям</div>
+   <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span>МА Душанбе</span><b>84</b></div>
+   <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span>Сомон Эйр</span><b>80</b></div>
+   <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span>МА Худжанд</span><b>76</b></div></div>`)}
+]
+};
+const TRACK_IDS=Object.keys(TRACKS);
+
+let track='learner', i=0;
+const stepwrap=$('#stepwrap');
+
+function render(animate){
+  const steps=TRACKS[track], s=steps[i];
+  TRACK_IDS.forEach(id=>$('#tab-'+id).setAttribute('aria-selected',track===id));
+  $('#dots').innerHTML=steps.map((_,k)=>`<button class="dot ${k<i?'done':''} ${k===i?'now':''}" data-k="${k}" aria-label="Шаг ${k+1}"></button>`).join('');
+  $('#count').textContent=`${i+1} / ${steps.length}`;
+  $('#screen').innerHTML=s.scr;
+  if(animate!==false){ stepwrap.style.animation='none'; void stepwrap.offsetWidth; stepwrap.style.animation=''; }
+  $('#eyebrow').textContent=s.eye;
+  $('#stitle').textContent=s.t;
+  $('#sdesc').textContent=s.d;
+  $('#noteSlot').innerHTML = s.note ? `<div class="note ${s.note[2]?'warn':''}"><span class="nic">${s.note[0]}</span><span>${s.note[1]}</span></div>` : '';
+  $('#prev').disabled=i===0;
+  const last=i===steps.length-1, nx=$('#next');
+  nx.classList.toggle('done',last);
+  nx.textContent = last ? '↻ С начала' : 'Дальше →';
+  try{localStorage.setItem('avsec_guide_track',track);}catch(e){}
+}
+function go(d){ const n=TRACKS[track].length; i=Math.min(Math.max(0,i+d),n-1); render(); }
+function setTrack(id){ if(id===track)return; track=id; i=0; render(); }
+
+$('#next').onclick=()=>{ if(i===TRACKS[track].length-1){ i=0; render(); } else go(1); };
+$('#prev').onclick=()=>go(-1);
+TRACK_IDS.forEach(id=>{ $('#tab-'+id).onclick=()=>setTrack(id); });
+$('#dots').onclick=e=>{ const d=e.target.closest('.dot'); if(d){ i=+d.dataset.k; render(); } };
+document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight')go(1); else if(e.key==='ArrowLeft')go(-1); });
+
+// theme toggle
+const root=document.documentElement;
+(function(){ try{ const saved=localStorage.getItem('avsec_guide_theme'); if(saved)root.setAttribute('data-theme',saved);}catch(e){} })();
+$('#theme').onclick=()=>{
+  const cur=root.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  const nx=cur==='dark'?'light':'dark';
+  root.setAttribute('data-theme',nx);
+  try{localStorage.setItem('avsec_guide_theme',nx);}catch(e){}
+};
+
+// reduced motion
+if(matchMedia('(prefers-reduced-motion:reduce)').matches) document.body.classList.add('reduce');
+
+// Копия на сайте приложения: её собирает build-guide.mjs и ставит data-site на <html>.
+const SITE = root.hasAttribute('data-site');
+const EMBED = SITE && window.self !== window.top;   // открыта поверх приложения
+(function(){
+  if(!SITE) return;                                  // на claude.ai остаётся внешняя ссылка на приложение
+  const b=$('#back');
+  if(EMBED){ b.hidden=true; document.body.classList.add('embedded'); return; }   // закрывает кнопка приложения
+  b.href='./'; b.removeAttribute('target'); b.removeAttribute('rel'); b.textContent='← В приложение';
+})();
+
+// Адрес с меткой: #learner, #examiner, #learner-8 (сразу нужный шаг)
+function applyHash(){
+  const m=(location.hash||'').replace('#','').match(/^([a-z]+)(?:-(\d+))?$/);
+  if(!m || !TRACKS[m[1]]) return false;
+  track=m[1];
+  i=Math.min(Math.max(0,(+m[2]||1)-1), TRACKS[track].length-1);
+  return true;
+}
+window.addEventListener('hashchange',()=>{ if(applyHash()) render(); });
+(function(){
+  if(!applyHash()){ try{ const saved=localStorage.getItem('avsec_guide_track'); if(TRACKS[saved])track=saved; }catch(e){} }
+  render(false);
+})();
+</script>
+</html>
