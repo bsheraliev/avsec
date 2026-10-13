@@ -448,6 +448,8 @@ body.exam-lock .opt,body.exam-lock .qtext{-webkit-touch-callout:none}
 .guide-bar .ghost{padding:8px 12px;font-size:13px}
 .guide-ov iframe{flex:1;width:100%;min-height:0;border:0;background:var(--bg)}
 body.guide-open{overflow:hidden}
+/* пока инструкция открыта, плавающая кнопка обращений (feedback.js) не лежит поверх неё */
+body.guide-open .fbk-btn{display:none!important}
 </style>
 </head>
 <body>
@@ -464,6 +466,6 @@ body.guide-open{overflow:hidden}
 <script src="./xray.js"></script>
 <script src="./license.js"></script>
 <script src="./app.js"></script>
-<script src="feedback.js" data-app="avsec" data-version="v27" defer></script>
+<script src="feedback.js" data-app="avsec" data-version="v28" defer></script>
 </body>
 </html>
