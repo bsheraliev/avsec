@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.5.1";
 const CONTACT_TG = "https://t.me/Ori_gemini_bot";   // контакт/поддержка в Telegram
 /* Основные организации/компании ГА РТ для выбора при запросе аттестации.
    «Другая организация…» открывает поле свободного ввода. Список легко расширять. */
@@ -208,6 +208,7 @@ function renderHome() {
       <div class="dbar"><div class="dfill" style="width:${Math.min(100, Math.round(todayC / state.daily.goal * 100))}%"></div></div>
       <span>🔥 <b>${state.daily.streak}</b> ${t("дн.")}</span>
     </div>
+    <button class="guidelink" onclick="openGuide('learner')">📖 ${t("Как пользоваться — пошагово")}</button>
     ${licenseBanner()}
     <div class="menu">
       ${menuForRole().map((m, i) => {
@@ -271,6 +272,7 @@ function renderUnlock() {
     </div>
     <div id="licMsg" class="unlock-msg"></div>
     <p class="unlock-note">${t("Нет кода? Обратитесь к вашей организации за кодом доступа.")}</p>
+    <button class="guidelink" onclick="openGuide('learner-5')">📖 ${t("Как получить и ввести код — пошагово")}</button>
     <a class="primary" style="display:block;text-align:center;text-decoration:none;max-width:340px;margin:8px auto 0" href="${CONTACT_TG}" target="_blank" rel="noopener">${t("✈️ Связаться в Telegram")}</a>
   </div>`;
   const inp = document.getElementById("licCode");
@@ -701,6 +703,7 @@ function renderAttest() {
       <select id="attOrg" class="select">${orgOpts}</select>
       <input id="attOrgOther" class="select" type="text" placeholder="${t("Название организации")}" value="${orgCustom ? esc(att.org) : ""}" style="${orgCustom ? "" : "display:none"}">
       <input id="attUnit" class="select" type="text" placeholder="${t("Подразделение / должность")}" value="${esc(att.unit)}">
+      <button type="button" class="guidelink" onclick="openGuide('learner-8')">📖 ${t("Как получить код допуска — пошагово")}</button>
       <button class="next" id="attReq" disabled>${t("Запросить допуск")}</button>
       <div id="attApprove" class="attapprove" style="display:none">
         <div class="why" id="attMsg"></div>
@@ -1213,6 +1216,8 @@ function renderSettings() {
       <input id="orgInput" class="select" type="text" maxlength="24" placeholder="напр. DYU" value="${(state.org || "").replace(/"/g, "&quot;")}"></div>
     <div class="setrow"><div class="setlbl"><b>ИИ-проверка открытых ответов</b><small>${(localStorage.getItem("avsec_ai_url") || "").trim() ? "свой эндпоинт" : "встроенный бэкенд"}</small></div>
       <button class="ghost" onclick="setupAI()">⚙️ Настроить</button></div>
+    <div class="setrow"><div class="setlbl"><b>${t("Инструкция")}</b><small>${t("как пользоваться тренажёром")}</small></div>
+      <button class="ghost" onclick="openGuide('learner')">📖 ${t("Открыть")}</button></div>
     <div class="setrow col"><div class="setlbl"><b>О тренажёре</b><small>версия 1.0</small></div>
       <small class="qsub">AvSec — учебный тренажёр по авиационной безопасности на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.</small></div>
   </div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
@@ -1225,6 +1230,32 @@ function resetAll() {
 }
 
 /* ===========================================================================
+   ПРОВОДНИК (guide.html) — открывается слоем поверх приложения, а не переходом:
+   экран под ним не перерисовывается, введённые данные и уже запрошенный код
+   допуска остаются на месте. step — метка вида "learner-8" (вкладка и шаг).
+   =========================================================================== */
+let guideBackWas = false;
+function guideOpen() { const ov = $("#guideOv"); return !!ov && !ov.hidden; }
+function openGuide(step) {
+  const ov = $("#guideOv"), fr = $("#guideFrame"), url = "guide.html#" + (step || "learner");
+  track("open/guide");
+  $("#guideTitle").textContent = t("Инструкция");
+  $("#guideClose").textContent = "✕ " + t("Закрыть");
+  if (!fr.dataset.loaded) { fr.src = url; fr.dataset.loaded = "1"; }
+  else { try { fr.contentWindow.location.replace(new URL(url, location.href).href); } catch (e) { fr.src = url; } }
+  ov.hidden = false; document.body.classList.add("guide-open");
+  if (inTelegram) { try { guideBackWas = !!TG.BackButton.isVisible; TG.BackButton.show(); } catch (e) {} }
+  try { history.pushState({ guide: 1 }, ""); } catch (e) {}   // кнопка «назад» телефона закроет инструкцию
+  $("#guideClose").focus();
+}
+function closeGuide(fromBack) {
+  if (!guideOpen()) return;
+  $("#guideOv").hidden = true; document.body.classList.remove("guide-open");
+  if (inTelegram && !guideBackWas) { try { TG.BackButton.hide(); } catch (e) {} }
+  if (!fromBack && history.state && history.state.guide) { try { history.back(); } catch (e) {} }
+}
+
+/* ===========================================================================
    TELEGRAM MINI APP (под защитой — в обычном браузере не мешает)
    =========================================================================== */
 const TG = (window.Telegram && window.Telegram.WebApp) || null;
@@ -1234,13 +1265,16 @@ function tgHaptic(type) { if (!inTelegram) return; try { TG.HapticFeedback.notif
 
 function startApp() {
   initAnalytics(); track("app-open"); trackSource();
+  $("#guideClose").addEventListener("click", () => closeGuide(false));
+  window.addEventListener("popstate", () => closeGuide(true));
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeGuide(false); });
   if (inTelegram) {
     try {
       TG.ready(); TG.expand();
       if (TG.setBackgroundColor) TG.setBackgroundColor("#06121a");
       if (TG.setHeaderColor) TG.setHeaderColor("#06121a");
       if (TG.disableVerticalSwipes) TG.disableVerticalSwipes();
-      TG.BackButton.onClick(() => renderHome());
+      TG.BackButton.onClick(() => { if (guideOpen()) return closeGuide(false); renderHome(); });
     } catch (e) {}
     try {
       TG.CloudStorage.getItem(SAVE_KEY, (err, val) => {
