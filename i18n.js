@@ -590,3 +590,7 @@ Object.assign(I18N.en, {
   "Открыть": "Open",
   "Закрыть": "Close"
 });
+
+/* Поле «Телефон или Telegram» на экране аттестации */
+Object.assign(I18N.tg, { "Телефон или Telegram (+992… или @ник)": "Телефон ё Telegram (+992… ё @ном)" });
+Object.assign(I18N.en, { "Телефон или Telegram (+992… или @ник)": "Phone or Telegram (+992… or @username)" });
