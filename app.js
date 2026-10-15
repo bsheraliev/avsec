@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.5.3";
+const APP_VERSION = "1.5.4";
 const CONTACT_TG = "https://t.me/Ori_gemini_bot";   // контакт/поддержка в Telegram
 /* Основные организации/компании ГА РТ для выбора при запросе аттестации.
    «Другая организация…» открывает поле свободного ввода. Список легко расширять. */

@@ -249,10 +249,13 @@ body{background:var(--bg);color:var(--fg);font-family:var(--font-body);line-heig
 </div>
 
 <script>
+/* Всё внутри функции: в Telegram для iPhone чужой скрипт перезаписывает общие
+   имена окна (head, body…), поэтому глобальных имён у проводника нет. */
+(()=>{
 "use strict";
 const $=s=>document.querySelector(s);
 function tap(pos){return `<span class="tap" style="${pos||'right:8px;top:50%;margin-top:-15px'}"></span>`;}
-function body(inner){return `<div class="scr-body">${inner}</div>`;}
+function abBody(inner){return `<div class="scr-body">${inner}</div>`;}
 function inner(title,xp){return `<div class="a-top"><span class="bk">‹ Меню</span><b>${title}</b><span class="xp">${xp===undefined?'120 XP':xp}</span></div>`;}
 /* шапка главного экрана: языки, бренд, роли (role — какая выбрана, tapOn — где кружок) */
 function home(role,tapOn){
@@ -260,7 +263,7 @@ function home(role,tapOn){
   const R=[['airport','Персонал аэропорта'],['crew','Экипаж и АК'],['manager','Руководители']]
     .map(r=>`<span class="a-chip ${r[0]===role?'on':''}">${r[1]}${tapOn==='role'&&r[0]===role?tap('left:50%;top:50%;margin:-15px 0 0 -15px'):''}</span>`).join('');
   return `<div class="a-lang">${L}</div><div class="a-brand">🛡️ <b>AvSec</b> · авиационная безопасность</div>`+
-    body(`<div class="a-roles">${R}</div>`+'%%');
+    abBody(`<div class="a-roles">${R}</div>`+'%%');
 }
 function tile(icon,title,sub,cls,withTap){return `<div class="a-tile ${cls||''}"><span class="ti">${icon}</span><b>${title}</b><small>${sub}</small>${withTap?tap():''}</div>`;}
 const RANK=`<div class="a-rank"><span class="ri">🪪</span><div><b>Новичок</b><small>120 XP · до следующего ранга 80 XP</small><div class="bar" style="margin-top:4px"><i style="width:60%"></i></div></div></div>`;
@@ -277,7 +280,7 @@ learner:[
   scr:home('airport').replace('%%',`<div class="a-tiles">${tile('📺','Видеоуроки','Короткие ролики по процессам','hl',true)}${tile('ℹ️','Основы АБ и угрозы','Что такое АБ, АНВ')}${tile('🪪','Пропуска и доступ','Бейдж, проход «хвостом»')}${tile('🚧','Зоны огр. доступа','Правила поведения в ЗОД')}${tile('🛂','Досмотр','Что нельзя проносить')}${tile('🚫','Запрещённые предметы','Оружие, ЖГА')}</div>`)},
  {eye:'Шаг 4',t:'Проходите темы',d:'Нажмите плитку темы и отвечайте на вопросы. После каждого ответа — короткое пояснение. За верные ответы растут очки и ранг.',
   note:['🎯','Дневная цель — 20 вопросов. Ошибки собираются в «Работу над ошибками».'],
-  scr:inner('Пропуска и доступ')+body(`<div class="mhead"><span>Вопрос 3 / 12</span><span class="chip ok">+10 XP</span></div><div class="bar"><i style="width:25%"></i></div>
+  scr:inner('Пропуска и доступ')+abBody(`<div class="mhead"><span>Вопрос 3 / 12</span><span class="chip ok">+10 XP</span></div><div class="bar"><i style="width:25%"></i></div>
    <div class="mcard" style="font-size:10px;line-height:1.45;text-align:left">Коллега просит пройти за вами по вашему пропуску. Ваши действия?</div>
    <div class="a-opt">Пропустить, он же свой</div>
    <div class="a-opt ok">✓ Отказать и сообщить в службу АБ</div>
@@ -285,7 +288,7 @@ learner:[
    <div class="a-why">Проход «хвостом» запрещён: каждый проходит по своему пропуску.</div>`)},
  {eye:'Шаг 5',t:'Откройте полный курс',d:'В демо часть тем под замком. Нажмите «Ввести код», введите код вашей организации и «Разблокировать» — откроются все темы.',
   note:['🔑','Код выдаёт ваша организация. Вводится один раз, потом курс работает без интернета до конца срока лицензии.'],
-  scr:inner('Полный доступ')+body(`<div style="text-align:center;font-size:28px;line-height:1.1">🛡️🔓</div>
+  scr:inner('Полный доступ')+abBody(`<div style="text-align:center;font-size:28px;line-height:1.1">🛡️🔓</div>
    <div style="text-align:center;font-weight:700;font-size:11.5px">Полный курс AvSec</div>
    <div class="scr-lead" style="text-align:center">175 вопросов по 11 темам. Доступ выдаётся организации по лицензии.</div>
    <div class="inp sel" style="justify-content:center;font-family:var(--font-mono);letter-spacing:.12em">AVSEC-48213</div>
@@ -293,7 +296,7 @@ learner:[
    <div class="scr-lead" style="text-align:center">Нет кода? Обратитесь к вашей организации.</div>`)},
  {eye:'Шаг 6',t:'Тренируйте глаз на рентгене',d:'На снимке интроскопа нажмите на запрещённый предмет. Если на снимке всё чисто — «Нарушений нет».',
   note:['💡','Снимок можно смотреть в цвете, чёрно-белым и в негативе. Есть подсказка.'],
-  scr:inner('Распознавание на рентгене')+body(`<div class="mhead"><span>Снимок 2/10</span><span class="chip amber">Найдите предмет</span></div>
+  scr:inner('Распознавание на рентгене')+abBody(`<div class="mhead"><span>Снимок 2/10</span><span class="chip amber">Найдите предмет</span></div>
    <div class="xr"><i class="bag"></i><i class="o1"></i><i class="o2"></i><i class="o3"></i><span class="knife">${tap('left:50%;top:50%;margin:-15px 0 0 -15px')}</span></div>
    <div style="display:flex;gap:5px;justify-content:center"><span class="a-chip on">Цвет</span><span class="a-chip">Ч/Б</span><span class="a-chip">Негатив</span></div>
    <div style="display:flex;gap:6px"><div class="mbtn ghost" style="flex:1;font-size:9px;padding:8px 4px">💡 Подсказка</div><div class="mbtn ghost" style="flex:1;font-size:9px;padding:8px 4px">✅ Нарушений нет</div></div>`)},
@@ -301,7 +304,7 @@ learner:[
   scr:home('airport').replace('%%',`<div class="a-tiles">${tile('🩻','Распознавание на рентгене','Снимок интроскопа')}${tile('🧑‍✈️','По службам аэропорта','Перрон, регистрация')}${tile('📝','Аттестация','Проктор-экзамен')}${tile('⏱️','Экзамен на время','15 вопросов · таймер 20 c','hl',true)}${tile('🧯','Работа над ошибками','4 на повторение','hl')}</div>`)},
  {eye:'Шаг 8',t:'Аттестация: введите данные',d:'Откройте плитку «Аттестация». Введите ФИО, телефон или Telegram, выберите организацию из списка, укажите подразделение и нажмите «Запросить допуск».',
   note:['🔒','Экзаменатору сразу придёт персональный код. Без него аттестация не начнётся.'],
-  scr:inner('Аттестация')+body(`<div class="mcard" style="display:flex;flex-direction:column;gap:7px">
+  scr:inner('Аттестация')+abBody(`<div class="mcard" style="display:flex;flex-direction:column;gap:7px">
    <div class="inp">Каримов Рустам Алиевич</div>
    <div class="inp">+992 90 123 45 67</div>
    <div class="mfield" style="margin-top:-4px"><div class="inp sel">Международный аэропорт Душанбе ▾</div>${tap('right:8px;bottom:0')}</div>
@@ -310,7 +313,7 @@ learner:[
    <div class="mbtn ghost" style="font-size:9.5px;padding:8px">📋 Журнал аттестаций</div>`)},
  {eye:'Шаг 9',t:'Введите код и сдавайте',d:'Экзаменатор продиктует код, он действует 15 минут. Дальше 20 вопросов: 15 минут на всё и 45 секунд на вопрос. Проходной балл — 75%.',
   note:['⚠️','Не выходите из приложения и не копируйте текст: уходы фиксируются и видны экзаменатору.',true],
-  scr:inner('Аттестация')+body(`<div class="tg"><div class="tgh">Экзаменатор</div>Ваш код — <b>4 8 2 7</b></div>
+  scr:inner('Аттестация')+abBody(`<div class="tg"><div class="tgh">Экзаменатор</div>Ваш код — <b>4 8 2 7</b></div>
    <div class="mcard" style="display:flex;flex-direction:column;gap:7px">
    <div class="scr-lead" style="text-align:left">Запрос <b style="color:var(--app-fg)">№R482</b> отправлен экзаменатору. Получите код и введите ниже:</div>
    <div class="inp sel" style="justify-content:center;letter-spacing:.3em;font-family:var(--font-mono)">4827</div>
@@ -318,7 +321,7 @@ learner:[
    <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap"><span class="chip amber">⏱ 15:00</span><span class="chip amber">⏳ 45 с</span><span class="chip warn">⚠ уходов: 0</span></div>`)},
  {eye:'Готово',t:'Результат и справка',d:'Сразу видите результат. Справку о прохождении можно распечатать или сохранить в PDF.',
   note:['📤','Результат сам уходит экзаменатору в Telegram и в общую таблицу — пересылать ничего не нужно.'],
-  scr:inner('Аттестация')+body(`<div class="bigpct">85%</div>
+  scr:inner('Аттестация')+abBody(`<div class="bigpct">85%</div>
    <div style="text-align:center"><span class="chip ok" style="font-size:10.5px;padding:5px 12px">✓ Аттестация пройдена</span></div>
    <div class="scr-lead" style="text-align:center">Правильно 17 из 20 · время 9:40</div>
    <div class="mcard" style="text-align:center"><div style="font-size:20px">🛡️</div><div style="font-size:7.5px;letter-spacing:.14em;color:var(--app-muted)">СПРАВКА О ПРОХОЖДЕНИИ</div>
@@ -334,24 +337,24 @@ examiner:[
    <div class="mbtn ghost" style="font-size:9.5px;padding:8px">📨 Поделиться с коллегой</div>`)},
  {eye:'Один раз',t:'Подключение к Telegram',d:'Коды допуска и результаты приходят экзаменатору в Telegram. Бот подключается один раз — это настраивает владелец, вам ничего делать не нужно.',
   note:['✅','Если коды и результаты уже приходят — всё настроено, переходите к следующему шагу.'],
-  scr:inner('Экзаменатор','')+body(`<div class="mcard" style="text-align:center"><div style="font-size:30px">🤖</div><b style="font-size:11px">Бот экзаменатора</b><div style="font-size:9px;color:var(--app-muted);margin-top:3px">подключён</div></div>
+  scr:inner('Экзаменатор','')+abBody(`<div class="mcard" style="text-align:center"><div style="font-size:30px">🤖</div><b style="font-size:11px">Бот экзаменатора</b><div style="font-size:9px;color:var(--app-muted);margin-top:3px">подключён</div></div>
    <div class="tg"><div class="tgh">Бот-экзаменатор</div>Готов принимать запросы на аттестацию 🛡️</div>
    <div class="scr-lead" style="margin-top:auto">Коды и результаты приходят сюда, в Telegram.</div>`)},
  {eye:'Шаг 1',t:'Вам приходит запрос',d:'Когда сотрудник нажимает «Запросить допуск», в Telegram приходит запрос: ФИО, телефон или Telegram сотрудника, организация, подразделение и персональный код.',
-  scr:inner('Экзаменатор','')+body(`<div class="tg"><div class="tgh">🎓 Запрос на аттестацию (№R482)</div>
+  scr:inner('Экзаменатор','')+abBody(`<div class="tg"><div class="tgh">🎓 Запрос на аттестацию (№R482)</div>
    ФИО: <b>Каримов Рустам Алиевич</b><br>Связь: <b>+992 90 123 45 67</b><br>Организация: <b>МА Душанбе</b><br>Подразделение: <b>Служба перронного контроля</b><br>Предмет: <b>AvSec · Авиационная безопасность</b><br><br>🔑 Код для кандидата: <span class="k">4827</span><br><span style="color:#8aa0b5">(действует 15 минут)</span></div>`)},
  {eye:'Шаг 2',t:'Продиктуйте код',d:'Назовите сотруднику код из сообщения. Он одноразовый и действует 15 минут — после ввода аттестация начнётся.',
   note:['🔑','Один код — одна аттестация. На новую попытку придёт новый код.'],
-  scr:inner('Экзаменатор','')+body(`<div class="tg"><div class="tgh">🎓 Запрос на аттестацию (№R482)</div>Каримов Рустам Алиевич · МА Душанбе<br>🔑 Код: <span class="k">4827</span></div>
+  scr:inner('Экзаменатор','')+abBody(`<div class="tg"><div class="tgh">🎓 Запрос на аттестацию (№R482)</div>Каримов Рустам Алиевич · МА Душанбе<br>🔑 Код: <span class="k">4827</span></div>
    <div class="speech">«Ваш код — <span class="dict">4 8 2 7</span>»</div>
    <div class="scr-lead" style="margin-top:auto">Сотрудник вводит код у себя и начинает аттестацию.</div>`)},
  {eye:'Шаг 3',t:'Получаете результат',d:'Как только сотрудник закончил, приходит результат: балл, сдан или не сдан, время и число выходов из приложения.',
   note:['⚠️','«Выходов из приложения» больше нуля — сотрудник сворачивал аттестацию. Повод присмотреться.',true],
-  scr:inner('Экзаменатор','')+body(`<div class="tg"><div class="tgh">📋 Результат аттестации (№R482)</div>
+  scr:inner('Экзаменатор','')+abBody(`<div class="tg"><div class="tgh">📋 Результат аттестации (№R482)</div>
    ФИО: <b>Каримов Рустам Алиевич</b><br>Организация: <b>МА Душанбе</b><br>Предмет: <b>AvSec · Авиационная безопасность</b><br>Результат: <b>85% (17/20)</b> — <span class="k">СДАН ✅</span><br>Время: <b>9:40</b><br>Выходов из приложения: <b>0</b></div>`)},
  {eye:'Сводка',t:'Все результаты — в таблице',d:'Каждая аттестация попадает в общую Google-таблицу и на дашборд: сводка по приложениям и по организациям.',
   note:['📊','Отдельно подсвечиваются аттестации с уходами со вкладки — подозрение на списывание.'],
-  scr:inner('Дашборд','')+body(`<div class="mcard" style="padding:9px"><div class="mhead" style="margin-bottom:6px"><b style="color:var(--app-fg)">Сводка</b><span>всё время</span></div>
+  scr:inner('Дашборд','')+abBody(`<div class="mcard" style="padding:9px"><div class="mhead" style="margin-bottom:6px"><b style="color:var(--app-fg)">Сводка</b><span>всё время</span></div>
    <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span style="color:var(--app-muted)">Сдано</span><b>17 / 23</b></div>
    <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span style="color:var(--app-muted)">Средний балл</span><b>79.8</b></div>
    <div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0"><span style="color:var(--warn)">С уходами</span><b style="color:var(--warn)">6 ⚠</b></div></div>
@@ -428,5 +431,6 @@ window.addEventListener('hashchange',()=>{ if(applyHash()) render(); });
 (function(){
   if(!applyHash()){ try{ const saved=localStorage.getItem('avsec_guide_track'); if(TRACKS[saved])track=saved; }catch(e){} }
   render(false);
+})();
 })();
 </script>
