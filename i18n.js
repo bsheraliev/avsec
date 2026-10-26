@@ -1013,3 +1013,15 @@ Object.assign(I18N.en, {
   "Это продукты питания, а не взрывчатое вещество. Оба объекта органические (оранжевые), но структура разная: у ВВ масса однородная, с ровными краями и без внутренних деталей, а у продуктов видна неоднородность — куски, пустоты, неровные границы. Продукты в ручной клади не запрещены (ограничения касаются жидкостей и ввоза в отдельные страны).": "These are food products, not an explosive. Both objects are organic (orange), but their structure differs: an explosive mass is uniform, with smooth edges and no internal detail, whereas food shows irregularity — chunks, voids, uneven edges. Food is not prohibited in cabin baggage (restrictions concern liquids and import into certain countries).",
   "Шприцы и лекарственные средства разрешены к перевозке в ручной клади при наличии медицинских показаний; жидкие лекарства не подпадают под ограничение 100 мл при подтверждающих документах. Пассажира не задерживают — при необходимости уточняют назначение и проверяют документы. Здесь важно не создавать ложную тревогу.": "Syringes and medicines are allowed in cabin baggage when medically needed; liquid medicines are exempt from the 100 ml limit with supporting documents. The passenger is not detained — if needed, the purpose is clarified and documents are checked. The key here is not to raise a false alarm."
 });
+
+/* Окно «Напишите нам в Telegram» — если приложение Telegram не открылось (t.me недоступен) */
+Object.assign(I18N.tg, {
+  "Напишите нам в Telegram": "Ба мо дар Telegram нависед",
+  "Не удалось открыть Telegram автоматически. Откройте Telegram, нажмите поиск и введите:": "Telegram худкор кушода нашуд. Telegram-ро кушоед, ҷустуҷӯро пахш кунед ва ворид кунед:",
+  "Скопировать": "Нусха бардоштан", "Скопировано ✓": "Нусха бардошта шуд ✓", "Открыть через t.me": "Тавассути t.me кушодан"
+});
+Object.assign(I18N.en, {
+  "Напишите нам в Telegram": "Message us on Telegram",
+  "Не удалось открыть Telegram автоматически. Откройте Telegram, нажмите поиск и введите:": "Telegram did not open automatically. Open Telegram, tap Search and enter:",
+  "Скопировать": "Copy", "Скопировано ✓": "Copied ✓", "Открыть через t.me": "Open via t.me"
+});
