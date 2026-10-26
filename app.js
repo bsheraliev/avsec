@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.5.5";
+const APP_VERSION = "1.5.6";
 /* ДИАГНОСТИКА — текст ошибки на экране вместо пустого экрана. Урок обращения Ш-2 Shohin (2026-10-14):
    в Telegram для iPhone чужой скрипт подменил глобальную функцию, все разделы падали, а причину
    с телефона не было видно сутки. Код замкнут в функции и не опирается на глобальные имена
@@ -235,13 +235,13 @@ function beep(ok) {
   } catch (e) {}
 }
 function toast(msg, cls = "") {
-  const t = document.createElement("div"); t.className = "toast " + cls; t.textContent = msg;
-  document.body.appendChild(t); setTimeout(() => t.classList.add("show"), 10);
-  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2200);
+  const box = document.createElement("div"); box.className = "toast " + cls; box.textContent = t(msg);   // сам переводит; уже переведённое не меняется
+  document.body.appendChild(box); setTimeout(() => box.classList.add("show"), 10);
+  setTimeout(() => { box.classList.remove("show"); setTimeout(() => box.remove(), 300); }, 2200);
 }
 function addXP(n) {
   const before = rankFor(state.xp); state.xp += n; const after = rankFor(state.xp);
-  if (after.name !== before.name) { toast("Новый ранг: " + after.name + " " + after.icon, "rank"); tgHaptic("success"); }
+  if (after.name !== before.name) { toast(t("Новый ранг") + ": " + t(after.name) + " " + after.icon, "rank"); tgHaptic("success"); }
   if (state.xp >= 600) unlock("expert");
   if (state.xp >= 900) unlock("audit");
   save();
@@ -249,7 +249,7 @@ function addXP(n) {
 function unlock(id) {
   if (state.achievements[id]) return;
   const a = DATA.achievements.find(x => x.id === id); if (!a) return;
-  state.achievements[id] = true; save(); toast("Ачивка: " + a.name + " " + a.icon, "ach");
+  state.achievements[id] = true; save(); toast(t("Ачивка") + ": " + t(a.name) + " " + a.icon, "ach");
 }
 
 /* ---------- Главный экран ---------- */
@@ -465,13 +465,13 @@ function xrayTap(vx, vy) {
   if (hit >= 0) {
     xr.found.push(hit);
     const tg = targets[hit];
-    markBox(tg, "ok", tg.name);
+    markBox(tg, "ok", t(tg.name));
     beep(true); tgHaptic("success");
     if (xr.found.length === targets.length) {
       xr.correct++; addXP(8); markDaily();
-      xrayDone(`✅ <b>${t("Верно")}</b> — ${targets.map(x => x.name).join(", ")}.<br>${targets.map(x => x.why).join("<br>")}`, true);
+      xrayDone(`✅ <b>${t("Верно")}</b> — ${targets.map(x => t(x.name)).join(", ")}.<br>${targets.map(x => t(x.why)).join("<br>")}`, true);
     } else {
-      $("#xrfb").innerHTML = `✅ ${t("Найдено")}: ${tg.name}. ${t("На снимке есть ещё нарушение — продолжайте.")}`;
+      $("#xrfb").innerHTML = `✅ ${t("Найдено")}: ${t(tg.name)}. ${t("На снимке есть ещё нарушение — продолжайте.")}`;
     }
   } else {
     beep(false); tgHaptic("error");
@@ -484,11 +484,11 @@ function xrayNone() {
   const s = xr.list[xr.i], targets = s.targets || [];
   if (!targets.length) {
     xr.correct++; addXP(8); markDaily(); beep(true); tgHaptic("success");
-    xrayDone(`✅ <b>${t("Верно")}</b> — ${t("сумка чистая")}.<br>${s.cleanWhy || ""}`, true);
+    xrayDone(`✅ <b>${t("Верно")}</b> — ${t("сумка чистая")}.<br>${s.cleanWhy ? t(s.cleanWhy) : ""}`, true);
   } else {
     beep(false); tgHaptic("error");
-    targets.forEach((tg, i) => { if (xr.found.indexOf(i) < 0) markBox(tg, "miss", tg.name); });
-    xrayDone(`❌ <b>${t("Пропуск угрозы")}</b> — ${targets.map(x => x.name).join(", ")}.<br>${targets.map(x => x.why).join("<br>")}`, false);
+    targets.forEach((tg, i) => { if (xr.found.indexOf(i) < 0) markBox(tg, "miss", t(tg.name)); });
+    xrayDone(`❌ <b>${t("Пропуск угрозы")}</b> — ${targets.map(x => t(x.name)).join(", ")}.<br>${targets.map(x => t(x.why)).join("<br>")}`, false);
   }
 }
 function xrayHint() {
@@ -504,6 +504,19 @@ function markBox(tg, cls, label) {
   d.style.width = (tg.w / W * 100) + "%"; d.style.height = (tg.h / H * 100) + "%";
   d.innerHTML = `<span>${label}</span>`;
   m.appendChild(d);
+  // подпись не наезжает на уже показанные: над рамкой → под ней → справа → внутри (что свободно).
+  // Меряем по раскладке (offset*), а не getBoundingClientRect: рамки ещё «выпрыгивают» с масштабом 1.25
+  const sp = d.firstChild, others = [...m.querySelectorAll(".xrbox span")].filter(x => x !== sp);
+  const box = e => { const p = e.parentNode; return { l: p.offsetLeft + e.offsetLeft, t: p.offsetTop + e.offsetTop, r: p.offsetLeft + e.offsetLeft + e.offsetWidth, b: p.offsetTop + e.offsetTop + e.offsetHeight }; };
+  // площадь наложения на чужие подписи; выход за край снимка — хуже любого наложения
+  const over = () => {
+    const a = box(sp);
+    if (a.l < 0 || a.t < 0 || a.r > m.clientWidth || a.b > m.clientHeight) return 1e9;
+    return others.reduce((sum, o) => { const b = box(o), w = Math.min(a.r, b.r) - Math.max(a.l, b.l), h = Math.min(a.b, b.b) - Math.max(a.t, b.t); return sum + (w > 0 && h > 0 ? w * h : 0); }, 0);
+  };
+  let best = "", bestV = over();
+  for (const pos of ["below", "beside", "inside"]) { if (!bestV) break; sp.className = pos; const v = over(); if (v < bestV) { best = pos; bestV = v; } }
+  sp.className = best;   // свободное место нашлось — оно; нет — где наложение меньше всего
 }
 function markDot(vx, vy) {
   const m = $("#xrmarks"); if (!m) return;
@@ -538,7 +551,7 @@ function topbar(title) {
   tgBack(true);
   return `<div class="topbar"><button class="back" onclick="renderHome()">${t("‹ Меню")}</button><span class="ttitle">${t(title)}</span><span class="xpchip">${state.xp} XP</span></div>`;
 }
-function changeLang(L) { state.lang = L; save(); renderHome(); }
+function changeLang(L) { state.lang = L; save(); document.documentElement.lang = L; renderHome(); }
 
 /* ===========================================================================
    КВИЗ
@@ -669,7 +682,7 @@ function backendUrl() { try { return LEADERBOARD.scriptUrl || ""; } catch (e) { 
 function aiUrl() { return (localStorage.getItem("avsec_ai_url") || backendUrl()).trim(); }
 function setupAI() {
   const cur = (localStorage.getItem("avsec_ai_url") || "").trim();
-  const v = prompt("URL эндпоинта ИИ-проверки открытых ответов (Apps Script, .../exec).\nПусто — использовать встроенный бэкенд по умолчанию:", cur);
+  const v = prompt(t("URL эндпоинта ИИ-проверки открытых ответов (Apps Script, .../exec).") + "\n" + t("Пусто — использовать встроенный бэкенд по умолчанию:"), cur);
   if (v === null) return;
   const s = v.trim(); if (s) localStorage.setItem("avsec_ai_url", s); else localStorage.removeItem("avsec_ai_url");
   toast(s ? "Свой ИИ-эндпоинт сохранён" : "Будет использован встроенный бэкенд", "ok");
@@ -733,8 +746,8 @@ function localCheck(q, answer) {
   const hit = terms.filter(term => ans.indexOf(term) >= 0);
   const score = terms.length ? Math.round(hit.length / terms.length * 100) : 0;
   return {
-    score, verdict: score >= 60 ? "зачтено (локально)" : "сверьте с эталоном",
-    feedback: "Локальная проверка по ключевым словам эталона (ИИ недоступен). Сверьте свой ответ с эталоном ниже.",
+    score, verdict: score >= 60 ? t("зачтено (локально)") : t("сверьте с эталоном"),
+    feedback: t("Локальная проверка по ключевым словам эталона (ИИ недоступен). Сверьте свой ответ с эталоном ниже."),
     missing: terms.filter(term => ans.indexOf(term) < 0).slice(0, 8), _local: true
   };
 }
@@ -766,7 +779,7 @@ function renderAttest() {
   att = { name: (att && att.name) || "", contact: (att && att.contact) || "", unit: (att && att.unit) || "", org: (att && att.org) || "", reqId: null };
   const orgCustom = att.org && ORGS.indexOf(att.org) < 0;
   const orgOpts = [`<option value="">— ${t("выберите организацию")} —</option>`]
-    .concat(ORGS.map(o => `<option value="${esc(o)}"${att.org === o ? " selected" : ""}>${esc(o)}</option>`))
+    .concat(ORGS.map(o => `<option value="${esc(o)}"${att.org === o ? " selected" : ""}>${esc(t(o))}</option>`))
     .concat([`<option value="__other"${orgCustom ? " selected" : ""}>${t("Другая организация…")}</option>`]).join("");
   app.innerHTML = `${topbar("Аттестация")}
     <div class="qcard">
@@ -848,7 +861,7 @@ function attStartQ() { attStopQ(); att.qLeft = ATT.PER_Q; attUpdQ(); attQTimer =
 function attStopQ() { if (attQTimer) { clearInterval(attQTimer); attQTimer = null; } }
 function attUpdQ() { const e = $("#attQtime"); if (e) { e.textContent = "⏳ " + Math.max(0, att.qLeft) + " c"; e.classList.toggle("low", att.qLeft <= 10); } }
 function attAutoAdvance() {
-  if (!att.answered) { att.answered = true; const q = att.list[att.i], lq = locQ(q); att.wrong.push({ q: lq.q, your: "(не отвечено — время вышло)", right: lq.a[q.correct], why: lq.why || "" }); }
+  if (!att.answered) { att.answered = true; const q = att.list[att.i], lq = locQ(q); att.wrong.push({ q: lq.q, your: t("(не отвечено — время вышло)"), right: lq.a[q.correct], why: lq.why || "" }); }
   attNext();
 }
 function attActive() { return att && !att.finished && !!$("#attQtime"); }
@@ -900,15 +913,15 @@ function attFinish(timeout) {
     </div>
     <div class="cert-wrap" style="margin-top:14px"><div class="cert-card">
       <div class="cert-emblem">🛡️</div>
-      <div class="cert-kicker">СПРАВКА О ПРОХОЖДЕНИИ</div>
-      <h1 class="cert-title">AvSec — Аттестация по авиабезопасности</h1>
-      <div class="cert-subtitle">ICAO Приложение 17 · Doc 8973 · НППБ РТ</div>
+      <div class="cert-kicker">${t("СПРАВКА О ПРОХОЖДЕНИИ")}</div>
+      <h1 class="cert-title">${t("AvSec — Аттестация по авиабезопасности")}</h1>
+      <div class="cert-subtitle">${t("ICAO Приложение 17 · Doc 8973 · НППБ РТ")}</div>
       <div class="cert-divider"></div>
       <div class="cert-rank"><div class="cert-rank-name">${esc(att.name)}</div><div class="cert-rank-sub">${esc((att.org ? att.org + " · " : "") + att.unit)}</div></div>
       <div class="cert-stats">
-        <div class="cert-stat"><div class="cert-stat-val">${pct}%</div><div class="cert-stat-lbl">результат</div></div>
-        <div class="cert-stat"><div class="cert-stat-val">${ok}/${total}</div><div class="cert-stat-lbl">верных</div></div>
-        <div class="cert-stat"><div class="cert-stat-val" style="color:${pass ? "var(--green)" : "var(--red)"}">${pass ? "СДАН" : "НЕ СДАН"}</div><div class="cert-stat-lbl">статус</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${pct}%</div><div class="cert-stat-lbl">${t("результат")}</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${ok}/${total}</div><div class="cert-stat-lbl">${t("верных")}</div></div>
+        <div class="cert-stat"><div class="cert-stat-val" style="color:${pass ? "var(--green)" : "var(--red)"}">${pass ? t("СДАН") : t("НЕ СДАН")}</div><div class="cert-stat-lbl">${t("статус")}</div></div>
       </div>
       <div class="cert-footer"><div class="cert-date">${ds}</div><div class="cert-sign">${att.reqId ? "№" + esc(att.reqId) : "AvSec"}</div></div>
     </div></div>
@@ -941,7 +954,7 @@ function renderAttestLog() {
     return `<div class="lbrow"><span class="lbpos">${r.pass ? "✅" : "❌"}</span><span class="lbname">${esc(r.name)}<small class="lborg">${esc((r.org ? r.org + " · " : "") + r.unit)} · ${d}${r.sw > 0 ? " · ⚠" + r.sw : ""}</small></span><span class="lbscore">${r.pct}%</span></div>`;
   }).join("") : `<div class="qsub">${t("Записей пока нет. Пройдите аттестацию — результат сохранится здесь.")}</div>`;
   app.innerHTML = `${topbar("Журнал аттестаций")}<div class="qcard">${rows}</div>
-    ${h.length ? `<button class="ghost danger fullrow" onclick="if(confirm('Очистить журнал аттестаций на этом устройстве?')){localStorage.removeItem('${ATT.HIST_KEY}');renderAttestLog();}">${t("Очистить журнал")}</button>` : ""}
+    ${h.length ? `<button class="ghost danger fullrow" onclick="if(confirm('${t("Очистить журнал аттестаций на этом устройстве?")}')){localStorage.removeItem('${ATT.HIST_KEY}');renderAttestLog();}">${t("Очистить журнал")}</button>` : ""}
     <button class="ghost fullrow" onclick="renderAttest()">${t("‹ Аттестация")}</button>`;
 }
 /* Антисписывание — активно только во время аттестации (body.exam-lock). */
@@ -957,23 +970,23 @@ document.addEventListener("visibilitychange", attOnVisibility);
 function renderAch() {
   app.innerHTML = `${topbar("Ачивки")}<div class="achlist">${DATA.achievements.map(a => {
     const got = state.achievements[a.id];
-    return `<div class="achitem ${got ? "got" : "locked"}"><span class="achicon">${got ? a.icon : "🔒"}</span><span class="achinfo"><b>${a.name}</b><small>${a.desc}</small></span></div>`;
-  }).join("")}</div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+    return `<div class="achitem ${got ? "got" : "locked"}"><span class="achicon">${got ? a.icon : "🔒"}</span><span class="achinfo"><b>${t(a.name)}</b><small>${t(a.desc)}</small></span></div>`;
+  }).join("")}</div><button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
 }
 function renderStats() {
   const cats = Object.keys(state.catStats);
   const rows = cats.length ? cats.map(c => {
     const s = state.catStats[c], p = s.total ? Math.round(s.correct / s.total * 100) : 0;
-    return `<div class="brrow"><span class="brname">${CAT_NAMES[c] || c}</span><span class="brbar"><span class="brfill ${p >= 70 ? "ok" : "no"}" style="width:${p}%"></span></span><span class="brval">${s.correct}/${s.total}</span></div>`;
-  }).join("") : `<div class="qsub">Пока нет данных — пройдите несколько вопросов.</div>`;
+    return `<div class="brrow"><span class="brname">${t(CAT_NAMES[c] || c)}</span><span class="brbar"><span class="brfill ${p >= 70 ? "ok" : "no"}" style="width:${p}%"></span></span><span class="brval">${s.correct}/${s.total}</span></div>`;
+  }).join("") : `<div class="qsub">${t("Пока нет данных — пройдите несколько вопросов.")}</div>`;
   app.innerHTML = `${topbar("Статистика")}
     <div class="qcard">
       <div class="row2" style="margin-bottom:14px">
-        <div class="bigstat"><b>${state.xp}</b><span>XP всего</span></div>
-        <div class="bigstat"><b>${state.totalCorrect}</b><span>верных ответов</span></div>
+        <div class="bigstat"><b>${state.xp}</b><span>${t("XP всего")}</span></div>
+        <div class="bigstat"><b>${state.totalCorrect}</b><span>${t("верных ответов")}</span></div>
       </div>
       <div class="breakdown">${rows}</div>
-    </div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+    </div><button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
 }
 
 /* ---------- Лидерборд (Google Apps Script — публичный URL, не секрет) ---------- */
@@ -1019,25 +1032,25 @@ function renderLeaderboard() {
     app.innerHTML = `${topbar("Лидерборд")}
       <div class="qcard"><div class="qtext">🏆 Общий лидерборд ещё не подключён.</div>
       <div class="why">Нужен бесплатный «бэкенд» — Google Таблица + Apps Script Web App (код в <b>backend/leaderboard.gs</b>). Создаёте Таблицу → вставляете скрипт → Deploy as Web app (Anyone) → вписываете URL в <b>LEADERBOARD.scriptUrl</b>. URL публичный, не секрет.</div>
-      <button class="next" onclick="renderHome()">В меню</button></div>`;
+      <button class="next" onclick="renderHome()">${t("В меню")}</button></div>`;
     return;
   }
-  app.innerHTML = `${topbar("Лидерборд")}<div class="qcard"><div class="qsub">Загрузка…</div></div>`;
+  app.innerHTML = `${topbar("Лидерборд")}<div class="qcard"><div class="qsub">${t("Загрузка…")}</div></div>`;
   fetch(LEADERBOARD.scriptUrl + "?action=top").then(r => r.json()).then(rows => {
     rows = (Array.isArray(rows) ? rows : []).map(x => { const p = String(x.username || "—").split(" ▪ "); return { name: p[0].replace(/</g, ""), org: (p[1] || "").replace(/</g, ""), score: +x.score || 0 }; });
-    const toggle = `<div class="lbtoggle"><button class="lbtab ${lbMode === "players" ? "on" : ""}" onclick="setLbMode('players')">👤 Игроки</button><button class="lbtab ${lbMode === "teams" ? "on" : ""}" onclick="setLbMode('teams')">👥 Команды</button></div>`;
+    const toggle = `<div class="lbtoggle"><button class="lbtab ${lbMode === "players" ? "on" : ""}" onclick="setLbMode('players')">👤 ${t("Игроки")}</button><button class="lbtab ${lbMode === "teams" ? "on" : ""}" onclick="setLbMode('teams')">👥 ${t("Команды")}</button></div>`;
     let list;
     if (lbMode === "teams") {
       const teams = {}; rows.forEach(r => { if (!r.org) return; if (!teams[r.org] || r.score > teams[r.org]) teams[r.org] = r.score; });
       const arr = Object.keys(teams).map(o => ({ org: o, score: teams[o] })).sort((a, b) => b.score - a.score).slice(0, 30);
-      list = arr.map((x, i) => `<div class="lbrow"><span class="lbpos">${i + 1}</span><span class="lbname">${x.org}</span><span class="lbscore">${x.score} XP</span></div>`).join("") || `<div class="qsub">Пока нет команд. Укажите аэропорт/организацию в «Настройках».</div>`;
+      list = arr.map((x, i) => `<div class="lbrow"><span class="lbpos">${i + 1}</span><span class="lbname">${x.org}</span><span class="lbscore">${x.score} XP</span></div>`).join("") || `<div class="qsub">${t("Пока нет команд. Укажите аэропорт/организацию в «Настройках».")}</div>`;
     } else {
-      list = rows.sort((a, b) => b.score - a.score).slice(0, 30).map((x, i) => `<div class="lbrow"><span class="lbpos">${i + 1}</span><span class="lbname">${x.name}${x.org ? `<small class="lborg">${x.org}</small>` : ""}</span><span class="lbscore">${x.score} XP</span></div>`).join("") || `<div class="qsub">Пока пусто — будьте первым!</div>`;
+      list = rows.sort((a, b) => b.score - a.score).slice(0, 30).map((x, i) => `<div class="lbrow"><span class="lbpos">${i + 1}</span><span class="lbname">${x.name}${x.org ? `<small class="lborg">${x.org}</small>` : ""}</span><span class="lbscore">${x.score} XP</span></div>`).join("") || `<div class="qsub">${t("Пока пусто — будьте первым!")}</div>`;
     }
-    app.innerHTML = `${topbar("Лидерборд")}${toggle}<div class="qcard"><div class="qsub">Топ-30</div>${list}</div>
-      <button class="next" onclick="submitScore()">📤 Отправить мой результат (${state.xp} XP)</button>
-      <button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
-  }).catch(() => { app.innerHTML = `${topbar("Лидерборд")}<div class="qcard"><div class="qtext">Не удалось загрузить лидерборд.</div><button class="next" onclick="renderHome()">В меню</button></div>`; });
+    app.innerHTML = `${topbar("Лидерборд")}${toggle}<div class="qcard"><div class="qsub">${t("Топ-30")}</div>${list}</div>
+      <button class="next" onclick="submitScore()">📤 ${t("Отправить мой результат")} (${state.xp} XP)</button>
+      <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
+  }).catch(() => { app.innerHTML = `${topbar("Лидерборд")}<div class="qcard"><div class="qtext">${t("Не удалось загрузить лидерборд.")}</div><button class="next" onclick="renderHome()">${t("В меню")}</button></div>`; });
 }
 function submitScore() {
   if (!lbReady()) return;
@@ -1050,11 +1063,11 @@ const APP_LINK = "https://bsheraliev.github.io/avsec/";
 const BOT_LINK = "https://t.me/AvSecApp_bot";
 function shareApp() {
   track("share/invite");
-  const text = "AvSec — тренажёр по авиационной безопасности 🛡️ Проверь свои знания: " + BOT_LINK;
-  if (inTelegram) { try { TG.openTelegramLink("https://t.me/share/url?url=" + encodeURIComponent(BOT_LINK + "?startapp=inv") + "&text=" + encodeURIComponent("AvSec — тренажёр по авиационной безопасности 🛡️ Проверь свои знания!")); return; } catch (e) {} }
-  if (navigator.share) { navigator.share({ title: "AvSec", text: "AvSec — тренажёр по авиационной безопасности 🛡️", url: APP_LINK }).catch(() => {}); return; }
-  if (navigator.clipboard) { navigator.clipboard.writeText(APP_LINK).then(() => toast("Ссылка скопирована")).catch(() => toast("Ссылка: " + APP_LINK)); }
-  else toast("Ссылка: " + APP_LINK);
+  const text = t("AvSec — тренажёр по авиационной безопасности") + " 🛡️ " + t("Проверь свои знания") + ": " + BOT_LINK;
+  if (inTelegram) { try { TG.openTelegramLink("https://t.me/share/url?url=" + encodeURIComponent(BOT_LINK + "?startapp=inv") + "&text=" + encodeURIComponent(t("AvSec — тренажёр по авиационной безопасности") + " 🛡️ " + t("Проверь свои знания") + "!")); return; } catch (e) {} }
+  if (navigator.share) { navigator.share({ title: "AvSec", text: t("AvSec — тренажёр по авиационной безопасности") + " 🛡️", url: APP_LINK }).catch(() => {}); return; }
+  if (navigator.clipboard) { navigator.clipboard.writeText(APP_LINK).then(() => toast("Ссылка скопирована")).catch(() => toast(t("Ссылка") + ": " + APP_LINK)); }
+  else toast(t("Ссылка") + ": " + APP_LINK);
 }
 
 /* ===========================================================================
@@ -1208,16 +1221,16 @@ function makeShareCanvas(pct, correct, total) {
   ctx.textAlign = "center";
   ctx.fillStyle = "#46c2ff"; ctx.font = "120px 'Segoe UI Emoji', system-ui, sans-serif"; ctx.fillText("🛡️", cx, 250);
   ctx.fillStyle = "#e8f4f8"; ctx.font = "800 64px system-ui, sans-serif"; ctx.fillText("AvSec", cx, 330);
-  ctx.fillStyle = "#8fb3c2"; ctx.font = "28px system-ui, sans-serif"; ctx.fillText("Авиационная безопасность · ICAO Прил.17", cx, 375);
+  ctx.fillStyle = "#8fb3c2"; ctx.font = "28px system-ui, sans-serif"; ctx.fillText(t("Авиационная безопасность · ICAO Прил.17"), cx, 375);
   ctx.fillStyle = pct >= 70 ? "#27e0a0" : "#ffc14d"; ctx.font = "800 220px system-ui, sans-serif"; ctx.fillText(pct + "%", cx, 620);
-  ctx.fillStyle = "#e8f4f8"; ctx.font = "600 40px system-ui, sans-serif"; ctx.fillText("Правильно " + correct + " из " + total, cx, 695);
-  ctx.fillStyle = "#27e0a0"; ctx.font = "700 38px system-ui, sans-serif"; ctx.fillText(rankFor(state.xp).name, cx, 820);
-  ctx.fillStyle = "#8fb3c2"; ctx.font = "30px system-ui, sans-serif"; ctx.fillText("Тренажёр по авиабезопасности", cx, 975);
+  ctx.fillStyle = "#e8f4f8"; ctx.font = "600 40px system-ui, sans-serif"; ctx.fillText(t("Правильно") + " " + correct + " " + t("из") + " " + total, cx, 695);
+  ctx.fillStyle = "#27e0a0"; ctx.font = "700 38px system-ui, sans-serif"; ctx.fillText(t(rankFor(state.xp).name), cx, 820);
+  ctx.fillStyle = "#8fb3c2"; ctx.font = "30px system-ui, sans-serif"; ctx.fillText(t("Тренажёр по авиабезопасности"), cx, 975);
   return c;
 }
 async function shareResult(pct, correct, total) {
   const c = makeShareCanvas(pct, correct, total);
-  const txt = "Мой результат в AvSec — тренажёре по авиационной безопасности 🛡️ " + pct + "%";
+  const txt = t("Мой результат в AvSec — тренажёре по авиационной безопасности") + " 🛡️ " + pct + "%";
   try {
     if (navigator.canShare) {
       const blob = await new Promise(r => c.toBlob(r, "image/png"));
@@ -1245,20 +1258,20 @@ function renderCertificate() {
     <div class="cert-wrap"><div class="cert-card">
       <div class="cert-emblem">🛡️</div>
       <div class="cert-kicker">CERTIFICATE OF COMPLETION</div>
-      <h1 class="cert-title">AvSec — Авиационная безопасность</h1>
-      <div class="cert-subtitle">Тренажёр по АБ · ICAO Приложение 17 / Doc 8973 / НППБ РТ</div>
+      <h1 class="cert-title">${t("AvSec — Авиационная безопасность")}</h1>
+      <div class="cert-subtitle">${t("Тренажёр по АБ · ICAO Приложение 17 / Doc 8973 / НППБ РТ")}</div>
       <div class="cert-divider"></div>
-      <div class="cert-rank"><div class="cert-rank-name">${rank.name}</div><div class="cert-rank-sub">${rank.sub || "уровень"}</div></div>
+      <div class="cert-rank"><div class="cert-rank-name">${t(rank.name)}</div><div class="cert-rank-sub">${t(rank.sub || "уровень")}</div></div>
       <div class="cert-stats">
         <div class="cert-stat"><div class="cert-stat-val">${xp}</div><div class="cert-stat-lbl">XP</div></div>
-        <div class="cert-stat"><div class="cert-stat-val">${correct}</div><div class="cert-stat-lbl">верных ответов</div></div>
-        <div class="cert-stat"><div class="cert-stat-val">${streak}</div><div class="cert-stat-lbl">дней подряд</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${correct}</div><div class="cert-stat-lbl">${t("верных ответов")}</div></div>
+        <div class="cert-stat"><div class="cert-stat-val">${streak}</div><div class="cert-stat-lbl">${t("дней подряд")}</div></div>
       </div>
       <div class="cert-footer"><div class="cert-date">${dateStr}</div><div class="cert-sign">AvSec PWA</div></div>
     </div>
     <div class="cert-actions">
-      <button class="cert-btn cert-btn-primary" id="certDownloadBtn">⬇ Скачать PNG</button>
-      <button class="cert-btn cert-btn-ghost" onclick="renderHome()">В меню</button>
+      <button class="cert-btn cert-btn-primary" id="certDownloadBtn">⬇ ${t("Скачать PNG")}</button>
+      <button class="cert-btn cert-btn-ghost" onclick="renderHome()">${t("В меню")}</button>
     </div></div>`;
   const btn = $("#certDownloadBtn");
   if (btn) btn.onclick = function () {
@@ -1270,11 +1283,11 @@ function renderCertificate() {
     ctx.textAlign = "center"; const cx = W / 2;
     ctx.fillStyle = "#46c2ff"; ctx.font = "76px 'Segoe UI Emoji', system-ui, sans-serif"; ctx.fillText("🛡️", cx, 170);
     ctx.fillStyle = "#8fb3c2"; ctx.font = "600 20px system-ui, sans-serif"; ctx.fillText("C E R T I F I C A T E   O F   C O M P L E T I O N", cx, 225);
-    ctx.fillStyle = "#e8f4f8"; ctx.font = "700 44px system-ui, sans-serif"; ctx.fillText("AvSec — Авиационная безопасность", cx, 285);
-    ctx.fillStyle = "#8fb3c2"; ctx.font = "19px system-ui, sans-serif"; ctx.fillText("ICAO Приложение 17 · Doc 8973 · НППБ РТ", cx, 322);
+    ctx.fillStyle = "#e8f4f8"; ctx.font = "700 44px system-ui, sans-serif"; ctx.fillText(t("AvSec — Авиационная безопасность"), cx, 285);
+    ctx.fillStyle = "#8fb3c2"; ctx.font = "19px system-ui, sans-serif"; ctx.fillText(t("ICAO Приложение 17 · Doc 8973 · НППБ РТ"), cx, 322);
     ctx.strokeStyle = "rgba(39,224,160,0.5)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - 120, 350); ctx.lineTo(cx + 120, 350); ctx.stroke();
-    ctx.fillStyle = "#27e0a0"; ctx.font = "700 38px system-ui, sans-serif"; ctx.fillText(rank.name, cx, 410);
-    const stats = [[String(xp), "XP"], [String(correct), "верных ответов"], [String(streak), "дней подряд"]];
+    ctx.fillStyle = "#27e0a0"; ctx.font = "700 38px system-ui, sans-serif"; ctx.fillText(t(rank.name), cx, 410);
+    const stats = [[String(xp), "XP"], [String(correct), t("верных ответов")], [String(streak), t("дней подряд")]];
     const colW = (W - p * 2 - 60) / 3, sx = p + 30 + colW / 2, sy = 530;
     stats.forEach((s, i) => { const x = sx + i * colW; ctx.fillStyle = "#46c2ff"; ctx.font = "700 44px system-ui, sans-serif"; ctx.fillText(s[0], x, sy); ctx.fillStyle = "#8fb3c2"; ctx.font = "18px system-ui, sans-serif"; ctx.fillText(s[1], x, sy + 32); });
     ctx.fillStyle = "#e8f4f8"; ctx.font = "600 24px system-ui, sans-serif"; ctx.fillText(dateStr, cx, 630);
@@ -1285,23 +1298,23 @@ function renderCertificate() {
 /* ---------- Настройки ---------- */
 function renderSettings() {
   app.innerHTML = `${topbar("Настройки")}<div class="qcard">
-    <div class="setrow"><div class="setlbl"><b>Звук</b><small>сигналы верно/неверно</small></div>
-      <button class="ghost" onclick="toggleSound()">${state.soundOn ? "🔊 Вкл" : "🔇 Выкл"}</button></div>
-    <div class="setrow col"><div class="setlbl"><b>Аэропорт / организация</b><small>для командного лидерборда (напр. DYU)</small></div>
-      <input id="orgInput" class="select" type="text" maxlength="24" placeholder="напр. DYU" value="${(state.org || "").replace(/"/g, "&quot;")}"></div>
-    <div class="setrow"><div class="setlbl"><b>ИИ-проверка открытых ответов</b><small>${(localStorage.getItem("avsec_ai_url") || "").trim() ? "свой эндпоинт" : "встроенный бэкенд"}</small></div>
-      <button class="ghost" onclick="setupAI()">⚙️ Настроить</button></div>
+    <div class="setrow"><div class="setlbl"><b>${t("Звук")}</b><small>${t("сигналы верно/неверно")}</small></div>
+      <button class="ghost" onclick="toggleSound()">${state.soundOn ? "🔊 " + t("Вкл") : "🔇 " + t("Выкл")}</button></div>
+    <div class="setrow col"><div class="setlbl"><b>${t("Аэропорт / организация")}</b><small>${t("для командного лидерборда (напр. DYU)")}</small></div>
+      <input id="orgInput" class="select" type="text" maxlength="24" placeholder="${t("напр. DYU")}" value="${(state.org || "").replace(/"/g, "&quot;")}"></div>
+    <div class="setrow"><div class="setlbl"><b>${t("ИИ-проверка открытых ответов")}</b><small>${t((localStorage.getItem("avsec_ai_url") || "").trim() ? "свой эндпоинт" : "встроенный бэкенд")}</small></div>
+      <button class="ghost" onclick="setupAI()">⚙️ ${t("Настроить")}</button></div>
     <div class="setrow"><div class="setlbl"><b>${t("Инструкция")}</b><small>${t("как пользоваться тренажёром")}</small></div>
       <button class="ghost" onclick="openGuide('learner')">📖 ${t("Открыть")}</button></div>
-    <div class="setrow col"><div class="setlbl"><b>О тренажёре</b><small>версия 1.0</small></div>
-      <small class="qsub">AvSec — учебный тренажёр по авиационной безопасности на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.</small></div>
-  </div><button class="ghost fullrow" onclick="renderHome()">В меню</button>`;
+    <div class="setrow col"><div class="setlbl"><b>${t("О тренажёре")}</b><small>${t("версия")} ${APP_VERSION}</small></div>
+      <small class="qsub">${t("AvSec — учебный тренажёр по авиационной безопасности на основе ICAO Приложения 17, Doc 8973 и Национальной программы безопасности ГА РТ. Не заменяет официальные документы и аттестацию.")}</small></div>
+  </div><button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
   const oi = $("#orgInput");
   if (oi) oi.addEventListener("change", () => { state.org = oi.value.trim().slice(0, 24); save(); toast("Сохранено"); });
 }
 function toggleSound() { state.soundOn = !state.soundOn; save(); renderSettings(); }
 function resetAll() {
-  if (confirm("Сбросить весь прогресс, XP и ачивки?")) { localStorage.removeItem(SAVE_KEY); Object.assign(state, defaultState()); renderHome(); toast("Прогресс сброшен"); }
+  if (confirm(t("Сбросить весь прогресс, XP и ачивки?"))) { localStorage.removeItem(SAVE_KEY); Object.assign(state, defaultState()); renderHome(); toast("Прогресс сброшен"); }
 }
 
 /* ===========================================================================
@@ -1339,6 +1352,7 @@ function tgBack(show) { if (!inTelegram) return; try { show ? TG.BackButton.show
 function tgHaptic(type) { if (!inTelegram) return; try { TG.HapticFeedback.notificationOccurred(type); } catch (e) {} }
 
 function startApp() {
+  document.documentElement.lang = state.lang || "ru";
   initAnalytics(); track("app-open"); trackSource();
   $("#guideClose").addEventListener("click", () => closeGuide(false));
   window.addEventListener("popstate", () => closeGuide(true));
