@@ -393,11 +393,12 @@ const I18N = {
 
 const LANG_NAMES = { ru: "Рус", tg: "Тоҷикӣ", en: "Eng" };
 
-function t(s) {
+/* const, а не function: лексическое имя не перезаписать через window.t = … (Telegram для iPhone подменял глобальные функции, обращение Ш-2 Shohin) */
+const t = function (s) {
   const L = (typeof state !== "undefined" && state.lang) || "ru";
   if (L === "ru" || !I18N[L]) return s;
   return I18N[L][s] || s;
-}
+};
 
 /* Переводы подписей видеоуроков (сцены) */
 Object.assign(I18N.tg, {
