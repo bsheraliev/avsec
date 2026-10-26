@@ -185,9 +185,14 @@ html,body{margin:0;padding:0;background:
 .xrbox{position:absolute;border:2.5px solid #12b37c;border-radius:6px;
   box-shadow:0 0 0 2px rgba(255,255,255,.75), 0 0 12px rgba(18,179,124,.55);animation:xrpop .22s ease-out}
 .xrbox.miss{border-color:#e03131;box-shadow:0 0 0 2px rgba(255,255,255,.75), 0 0 12px rgba(224,49,49,.5)}
-.xrbox span{position:absolute;left:0;top:-19px;font-size:10px;font-weight:800;white-space:nowrap;
+/* подпись растёт вверх и переносится в ширину рамки: длинные названия (tg/en) не наезжают на соседние */
+.xrbox span{position:absolute;left:0;bottom:100%;margin-bottom:3px;font-size:10px;font-weight:800;line-height:1.2;
+  width:max-content;max-width:max(100%, 72px);white-space:normal;
   background:#12b37c;color:#fff;border-radius:5px;padding:2px 6px}
 .xrbox.miss span{background:#e03131;color:#fff}
+.xrbox span.below{bottom:auto;top:100%;margin:3px 0 0}
+.xrbox span.beside{bottom:auto;top:0;left:100%;margin:0 0 0 3px}
+.xrbox span.inside{bottom:auto;top:2px;left:2px;margin:0}
 @keyframes xrpop{from{transform:scale(1.25);opacity:0}to{transform:scale(1);opacity:1}}
 .xrdot{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
   border:2.5px solid #e03131;box-shadow:0 0 0 1.5px rgba(255,255,255,.7);animation:xrfade .9s ease-out forwards}
@@ -475,6 +480,6 @@ body.guide-open .fbk-btn{display:none!important}
 <script src="./xray.js"></script>
 <script src="./license.js"></script>
 <script src="./app.js"></script>
-<script src="feedback.js" data-app="avsec" data-version="v31" defer></script>
+<script src="feedback.js" data-app="avsec" data-version="v32" defer></script>
 </body>
 </html>

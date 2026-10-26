@@ -468,7 +468,7 @@ var XRAY = (function () {
       svg: bag(
         cloth(300, 170, 52, 34) + phone(320, 80) + coins(80, 190) +
         '<rect x="120" y="80" width="110" height="80" rx="4" fill="' + ORG + '" opacity=".5" stroke="' + ORG_D + '" stroke-width="2"/>' +
-        '<text x="132" y="76" fill="#5b7383" font-size="9" font-family="system-ui">книга</text>' +
+        '<path d="M126 90h98M126 96h98M126 144h98M126 150h98" stroke="' + ORG_D + '" stroke-width=".8" opacity=".45"/>' +   // обрез страниц — на снимке текста нет
         knife(140, 110, 1.05, 0)
       ),
       targets: [{ x: 118, y: 100, w: 96, h: 34, name: "Нож в книге",
