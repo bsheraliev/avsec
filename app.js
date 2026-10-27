@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.5.7";
+const APP_VERSION = "1.5.8";
 /* ДИАГНОСТИКА — текст ошибки на экране вместо пустого экрана. Урок обращения Ш-2 Shohin (2026-10-14):
    в Telegram для iPhone чужой скрипт подменил глобальную функцию, все разделы падали, а причину
    с телефона не было видно сутки. Код замкнут в функции и не опирается на глобальные имена
@@ -602,13 +602,15 @@ function startQuiz(questions, title, cat, opts = {}) {
   quiz = { qs: questions, i: 0, correct: 0, streak: 0, lives: 3, title, cat, timed: !!opts.timed, secs: opts.secs || 20, log: [] };
   renderQuestion();
 }
+/* Вопрос на языке пользователя: q.tr[L] = { q, a, why, src } у закрытых и { q, ref, crit, src } у развёрнутых.
+   Чего нет в переводе — берётся из русского оригинала. */
 function locQ(q) {
   const L = state.lang;
-  if (L && L !== "ru" && q.tr && q.tr[L]) {
-    const tt = q.tr[L];
-    return { q: tt.q || q.q, a: (tt.a && tt.a.length === 4) ? tt.a : q.a, why: tt.why || q.why };
-  }
-  return { q: q.q, a: q.a, why: q.why };
+  const tt = (L && L !== "ru" && q.tr && q.tr[L]) || {};
+  return {
+    q: tt.q || q.q, a: (tt.a && q.a && tt.a.length === q.a.length) ? tt.a : q.a, why: tt.why || q.why,
+    src: tt.src || q.src, ref: tt.ref || q.ref, crit: tt.crit || q.crit
+  };
 }
 function renderQuestion() {
   if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
@@ -659,10 +661,10 @@ function answer(chosen, btn) {
     if (quiz.streak >= 10) unlock("streak10");
     if (q.cat === "screening") { state.domainCorrect.screening = (state.domainCorrect.screening || 0) + 1; if (state.domainCorrect.screening >= 20) unlock("screen20"); }
     const gain = 10 + Math.min(quiz.streak, 10); addXP(gain);
-    $("#fb").innerHTML = `<div class="fb ok">✅ ${t("Верно")} +${gain} XP</div><div class="why">${lq.why}</div><div class="src">📄 ${q.src}</div>`;
+    $("#fb").innerHTML = `<div class="fb ok">✅ ${t("Верно")} +${gain} XP</div><div class="why">${lq.why}</div><div class="src">📄 ${lq.src}</div>`;
   } else {
     quiz.streak = 0; quiz.lives--;
-    $("#fb").innerHTML = `<div class="fb no">❌ ${t("Неверно. Правильно:")} «${lq.a[q.correct]}»</div><div class="why">${lq.why}</div><div class="src">📄 ${q.src}</div>`;
+    $("#fb").innerHTML = `<div class="fb no">❌ ${t("Неверно. Правильно:")} «${lq.a[q.correct]}»</div><div class="why">${lq.why}</div><div class="src">📄 ${lq.src}</div>`;
   }
   $("#fb").innerHTML += `<button class="next" id="next">${quiz.i + 1 >= quiz.qs.length || quiz.lives <= 0 ? t("Итог →") : t("Дальше →")}</button>`;
   $("#next").addEventListener("click", () => { quiz.i++; renderQuestion(); });
@@ -738,7 +740,7 @@ function renderOpenQuestion(q) {
     </div>
     <div class="qcard">
       <div class="open-badge">✍️ ${hasAI ? t("Развёрнутый ответ · проверка ИИ") : t("Развёрнутый ответ · локальная проверка")}</div>
-      <div class="qtext">${q.q}</div>
+      <div class="qtext">${locQ(q).q}</div>
       <textarea class="open-input" id="openIn" rows="5" placeholder="${t("Введите ответ своими словами…")}"></textarea>
       <button class="next" id="openGo">${t("Проверить ответ")}</button>
       <div class="feedback" id="fb"></div>
@@ -771,7 +773,7 @@ async function submitOpenAnswer(q) {
 async function checkOpen(q, answer) {
   const url = aiUrl();
   if (!url) return localCheck(q, answer);
-  const body = JSON.stringify({ action: "check", subject: "Авиационная безопасность (ИКАО Приложение 17)", q: q.q, ref: q.ref, crit: q.crit || [], answer });
+  const body = JSON.stringify({ action: "check", subject: "Авиационная безопасность (ИКАО Приложение 17)", q: q.q, ref: q.ref, crit: q.crit || [], answer, lang: state.lang || "ru" });   // эталон — русский оригинал; lang — язык ответа
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body });
   if (!r.ok) throw new Error("http " + r.status);
   const d = await r.json();
@@ -779,9 +781,12 @@ async function checkOpen(q, answer) {
   return { score: Math.max(0, Math.min(100, Math.round(Number(d.score) || 0))), verdict: d.verdict || "", feedback: d.feedback || "", missing: Array.isArray(d.missing) ? d.missing : [], _ai: true };
 }
 function localCheck(q, answer) {
-  const norm = s => (s || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-я0-9 ]/g, " ");
-  const stop = new Set("и в во не на с со что а то как по из у за от о об для при или это его ее к до же бы был быть есть их они она он мы вы я но да чтобы если так уже еще нет ли бо про над под без через между".split(" "));
-  const terms = [...new Set(norm(q.ref).split(/\s+/).filter(w => w.length > 3 && !stop.has(w)))];
+  // сравнение с эталоном на языке пользователя; таджикские буквы — часть слова, а не разделитель
+  const norm = s => (s || "").toLowerCase().replace(/ё/g, "е").replace(/[^a-zа-яӣӯҳқғҷ0-9 ]/g, " ");
+  const stop = new Set(("и в во не на с со что а то как по из у за от о об для при или это его ее к до же бы был быть есть их они она он мы вы я но да чтобы если так уже еще нет ли бо про над под без через между " +
+    "with that this from they their them have been into which when what must also other only such than then there these those will would should could about over under each more most some your does " +
+    "барои бояд ҳамчун ҳангоми баъд пеш онҳо инро онро мешавад мебошад карда кардан намекунад дода шуда").split(" "));
+  const terms = [...new Set(norm(locQ(q).ref).split(/\s+/).filter(w => w.length > 3 && !stop.has(w)))];
   const ans = norm(answer);
   const hit = terms.filter(term => ans.indexOf(term) >= 0);
   const score = terms.length ? Math.round(hit.length / terms.length * 100) : 0;
@@ -794,11 +799,12 @@ function localCheck(q, answer) {
 function showOpenResult(q, res, gain) {
   const ok = res.score >= 60, fb = $("#fb");
   let h = `<div class="fb ${ok ? "ok" : "no"}">${ok ? "✅ " + t("Зачтено") : "❌ " + t("Незачтено")} · ${t("оценка")} ${res.score}/100${gain ? " +" + gain + " XP" : ""}</div>`;
-  if (res.verdict) h += `<div class="why"><b>${t("Вердикт")}:</b> ${esc(res.verdict)}${res.feedback ? "<br>" + esc(res.feedback) : ""}</div>`;
+  if (res.verdict) h += `<div class="why"><b>${t("Вердикт")}:</b> ${esc(t(res.verdict))}${res.feedback ? "<br>" + esc(res.feedback) : ""}</div>`;
   else if (res.feedback) h += `<div class="why">${esc(res.feedback)}</div>`;
   if (res.missing && res.missing.length) h += `<div class="why"><b>${t("Стоит добавить")}:</b> ${res.missing.map(esc).join(", ")}</div>`;
-  h += `<div class="why"><b>${t("Эталонный ответ")}:</b><br>${esc(q.ref)}</div>`;
-  if (q.src) h += `<div class="src">📄 ${q.src}</div>`;
+  const lq = locQ(q);
+  h += `<div class="why"><b>${t("Эталонный ответ")}:</b><br>${esc(lq.ref)}</div>`;
+  if (lq.src) h += `<div class="src">📄 ${lq.src}</div>`;
   if (res._local || res._offline) h += `<div class="src">${t("Оценка локальная (без ИИ). Подключить ИИ-проверку — в «Настройках».")}</div>`;
   h += `<button class="next" id="next">${quiz.i + 1 >= quiz.qs.length || quiz.lives <= 0 ? t("Итог →") : t("Дальше →")}</button>`;
   fb.innerHTML = h;

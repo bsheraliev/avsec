@@ -79,4 +79,5 @@ fs.writeFileSync(path.join(outDir, "avsec-backend.gs"), gs, "utf8");
 console.log("✔ data.js — пробник:", sampleQuiz.length, "вопр. (темы:", SAMPLE_CATS.join(", ") + ")");
 console.log("✔ data.full.enc — полная база", total, "вопр., AES-256-GCM,", Math.round(fullEnc.length / 1024), "КБ (публичный, без ключа бесполезен)");
 console.log("✔ backend/_generated/avsec-backend.gs — GAS с ключом (крошечный)");
-console.log("✔ Ключ AES (base64, в .gs и .avsec-fullkey, храните в тайне):", FULL_KEY_B64);
+/* сам ключ в консоль не печатаем (журналы, чаты, снимки экрана) — только отпечаток, чтобы сверить сборки */
+console.log("✔ Ключ AES: в .avsec-fullkey и backend/_generated (оба в .gitignore), отпечаток", crypto.createHash("sha256").update(FULL_KEY).digest("hex").slice(0, 12));
