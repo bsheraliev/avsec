@@ -27,7 +27,7 @@
    0 токенов Claude. Ключи живут только на сервере.
 
    ПРОТОКОЛ (POST, тело JSON):
-     {action:"check",   subject,q,ref,crit,answer}                 → {score,verdict,feedback,missing}
+     {action:"check",   subject,q,ref,crit,answer[,lang]}          → {score,verdict,feedback,missing}  (lang: ru|tg|en — язык feedback)
      {action:"request", name,unit,subject,catName}                 → {ok,reqId,delivered}
      {action:"verify",  reqId,code}                                → {ok}
      {action:"report",  name,unit,subject,catName,pct,ok,total,pass,switches,sec} → {ok,logged,sent}
@@ -46,7 +46,7 @@ function grade_(b) {
   var crit = (b.crit || []).map(function (c, i) { return (i + 1) + ") " + c; }).join("; ");
   var prompt =
     "Ты — строгий, но справедливый экзаменатор. Предмет: " + (b.subject || "авиация") + ".\n" +
-    "Оцени ответ обучаемого, сравнивая его С ЭТАЛОНОМ и КРИТЕРИЯМИ. Оценивай СМЫСЛ, а не дословность. Отвечай по-русски.\n" +
+    "Оцени ответ обучаемого, сравнивая его С ЭТАЛОНОМ и КРИТЕРИЯМИ. Оценивай СМЫСЛ, а не дословность. Ответ может быть на русском, таджикском или английском. Поля feedback и missing пиши " + ({ en: "по-английски", tg: "по-таджикски" }[b.lang] || "по-русски") + ", verdict — одним из русских слов ниже.\n" +
     "Верни СТРОГО JSON без markdown:\n" +
     '{"score": <целое 0-100>, "verdict": "зачтено|частично|незачтено", "feedback": "<1-3 предложения: что верно и чего не хватает>", "missing": ["<кратко пропущенный пункт>"]}\n\n' +
     "Вопрос: " + b.q + "\n" +
