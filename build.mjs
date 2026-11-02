@@ -49,6 +49,17 @@ function aesEnc(jsonStr, key) {
 if (!fs.existsSync(SRC)) { console.error("НЕТ data.src.js рядом с build.mjs"); process.exit(1); }
 const srcText = fs.readFileSync(SRC, "utf8");
 const DATA = Function(srcText.replace(/const\s+DATA\s*=/, "return "))();
+/* --- Закрытые вопросы «Проверка процессов» (КИАБ). Файл data.procs.src.js — только локально
+       (в .gitignore): массив объектов того же вида, что DATA.quiz, с cat:"procs". Попадают только в
+       зашифрованную полную базу; в публичный пробник — нет (procs нет в SAMPLE_CATS). --- */
+const PROCS_SRC = path.join(ROOT, "data.procs.src.js");
+if (fs.existsSync(PROCS_SRC)) {
+  const extra = Function(fs.readFileSync(PROCS_SRC, "utf8").replace(/const\s+PROCS_QUIZ\s*=/, "return "))();
+  const bad = extra.filter(q => q.cat !== "procs" || (q.type !== "open" && (!Array.isArray(q.a) || typeof q.correct !== "number")));
+  if (bad.length) { console.error("data.procs.src.js: неверные записи:", bad.length, "(нужны cat:\"procs\", a[], correct)"); process.exit(1); }
+  DATA.quiz = DATA.quiz.filter(q => q.cat !== "procs").concat(extra);
+  console.log("+ data.procs.src.js:", extra.length, "вопр. «Проверка процессов» (только в зашифрованную базу)");
+}
 const total = DATA.quiz.length;
 
 /* --- Пробник → data.js --- */

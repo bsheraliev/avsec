@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.5.8";
+const APP_VERSION = "1.5.9";
 /* ДИАГНОСТИКА — текст ошибки на экране вместо пустого экрана. Урок обращения Ш-2 Shohin (2026-10-14):
    в Telegram для iPhone чужой скрипт подменил глобальную функцию, все разделы падали, а причину
    с телефона не было видно сутки. Код замкнут в функции и не опирается на глобальные имена
@@ -160,9 +160,9 @@ const ROLE_ORDER = ["airport", "crew", "manager"];
 const COMMON_CATS = ["awareness", "access", "restricted", "screening", "prohibited",
                      "suspicious", "insider", "response", "culture", "cyber"];
 const ROLE_CATS = {
-  airport: COMMON_CATS.concat(["service"]),
+  airport: COMMON_CATS.concat(["service", "procs"]),
   crew:    COMMON_CATS.concat(["operator"]),
-  manager: COMMON_CATS.concat(["manager"])
+  manager: COMMON_CATS.concat(["manager", "procs"])
 };
 function roleCats() { return ROLE_CATS[state.role] || ROLE_CATS.airport; }
 function setRole(rk) { state.role = rk; save(); renderHome(); }
@@ -208,7 +208,7 @@ const CAT_NAMES = {
   awareness: "Основы АБ и угрозы", access: "Пропуска и доступ", restricted: "Зоны ограниченного доступа",
   screening: "Досмотр", prohibited: "Запрещённые предметы", suspicious: "Подозрительные предметы",
   insider: "Инсайдер и соцынженерия", response: "Действия при угрозе", culture: "Культура безопасности",
-  cyber: "Киберигиена", service: "По службам аэропорта",
+  cyber: "Киберигиена", service: "По службам аэропорта", procs: "Проверка процессов",
   operator: "АБ эксплуатанта ВС", manager: "Управление АБ", other: "Прочее"
 };
 const MENU = [
@@ -225,6 +225,7 @@ const MENU = [
   { go: "quiz-cyber", icon: "🖥️", title: "Киберигиена", sub: "Пароли, фишинг, USB" },
   { go: "xray", icon: "🩻", title: "Распознавание на рентгене", sub: "Снимок интроскопа · найди запрещённый предмет" },
   { go: "quiz-service", icon: "🧑‍✈️", title: "По службам аэропорта", sub: "Перрон, регистрация, клининг, грузовая, ГСМ", roles: ["airport"] },
+  { go: "quiz-procs", icon: "📋", title: "Проверка процессов", sub: "Чек-листы наблюдения на месте: шаги, оценки, замечания", roles: ["airport", "manager"] },
   { go: "quiz-operator", icon: "✈️", title: "АБ эксплуатанта ВС", sub: "ПАБ авиакомпании, безопасность и досмотр ВС", roles: ["crew"] },
   { go: "quiz-manager", icon: "🎖️", title: "Управление АБ", sub: "Программы, контроль качества, SOP, кризис-планы", roles: ["manager"] },
   { go: "exam", icon: "📝", title: "Аттестация", sub: "Проктор-экзамен · допуск экзаменатора + справка" },
