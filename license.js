@@ -8,6 +8,9 @@
   var LIC_KEY = "avsec_license_v1";
   var GAS_URL = "https://script.google.com/macros/s/AKfycbzzPC5DZm_c36DIjrT5yaxhlEgheqq8U-KO_fgNhskpJ27h6a5j-9mfaqR9xIbHsLnIYw/exec";
   var ENC_URL = "./data.full.enc";
+  /* Версия полной базы. ПОДНИМАТЬ при каждой пересборке data.full.enc: у кого в кэше база
+     другой версии, приложение само тихо перекачает её (по сохранённому коду, раз за релиз). */
+  var BANK_VER = "2026-11-02-procs";
 
   function b64ToBytes(b64) { var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
 
@@ -57,7 +60,7 @@
       .then(function (obj) {
         var quiz = obj.quiz; applyFull(quiz);
         org = meta.org || ""; expires = meta.expires || "";
-        saveCache({ code: code, org: org, expires: expires, quiz: quiz });
+        saveCache({ code: code, org: org, expires: expires, quiz: quiz, ver: BANK_VER });
         return { ok: true, org: org, expires: expires, count: quiz.length };
       })
       .catch(function (e) {
@@ -78,4 +81,12 @@
     unlock: unlock,
     deactivate: deactivate
   };
+
+  /* Кэш от прошлой версии базы → тихое обновление в фоне (DATA.quiz подменяется на месте;
+     тесты читают DATA.quiz в момент запуска, так что перерисовка не нужна). */
+  (function refreshStale() {
+    var c = loadCache();
+    if (!c || !c.code || c.ver === BANK_VER || !navigator.onLine) return;
+    unlock(c.code).then(function () {}, function () {});
+  })();
 })();
