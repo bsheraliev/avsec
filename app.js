@@ -8,7 +8,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const app = $("#app");
 const SAVE_KEY = "avsec_game_v1";
 /* Версия приложения. Обновлять вместе с версией кэша в sw.js. */
-const APP_VERSION = "1.5.11";
+const APP_VERSION = "1.5.12";
 /* ДИАГНОСТИКА — текст ошибки на экране вместо пустого экрана. Урок обращения Ш-2 Shohin (2026-10-14):
    в Telegram для iPhone чужой скрипт подменил глобальную функцию, все разделы падали, а причину
    с телефона не было видно сутки. Код замкнут в функции и не опирается на глобальные имена
@@ -197,6 +197,14 @@ function markDaily() {
 }
 function recordQuiz(q, correct) {
   const c = q.cat || "other";
+  if (c === "procs") {
+    const pid = procOf(q);
+    if (pid) {
+      state.procStats = state.procStats || {};
+      const ps = state.procStats[pid] || (state.procStats[pid] = { correct: 0, total: 0 });
+      ps.total++; if (correct) ps.correct++;
+    }
+  }
   if (!state.catStats[c]) state.catStats[c] = { correct: 0, total: 0 };
   state.catStats[c].total++;
   if (correct) { state.catStats[c].correct++; if (state.mistakes[q.q]) delete state.mistakes[q.q]; }
@@ -252,6 +260,42 @@ function trimPool(list) {        // оставить долю QUIZ_KEEP вопр
   if (QUIZ_KEEP >= 1) return list;
   const n = Math.max(1, Math.ceil(list.length * QUIZ_KEEP));
   return list.slice(0, n);
+}
+
+/* ───────── «Проверка процессов»: 18 процессов внутри одной плитки ─────────
+   Процесс вопроса берётся из начала поля src («P05 · …»), база не меняется. */
+const PROCS = [
+  ["P01", "🚪", "Контроль доступа в ЗОД"], ["P02", "🪪", "Пропускной режим"],
+  ["P03", "🚗", "Досмотр транспорта при въезде"], ["P04", "🧱", "Охрана периметра и ЗОД"],
+  ["P05", "🛂", "Досмотр пассажиров и ручной клади"], ["P06", "🧳", "Багаж в грузовом отсеке"],
+  ["P07", "✈️", "Защита ВС на стоянке"], ["P08", "📦", "Груз и почта"],
+  ["P09", "🍱", "Бортпитание и припасы"], ["P10", "🔫", "Оружие и особые категории пассажиров"],
+  ["P11", "⚠️", "Неопознанный предмет и бесхозный багаж"], ["P12", "🚨", "Повышение уровня угрозы"],
+  ["P13", "🩻", "Технические средства досмотра"], ["P14", "📋", "Внутренний контроль качества"],
+  ["P15", "🎓", "Подготовка и допуск персонала САБ"], ["P16", "🏛️", "Неконтролируемая зона"],
+  ["P17", "🔒", "Конфиденциальная информация по АБ"], ["P18", "📊", "Оценка риска"]
+];
+function procOf(q) { const m = /^P\d\d/.exec((q && q.src) || ""); return m ? m[0] : ""; }
+function renderProcs() {
+  const pool = (DATA.quiz || []).filter(q => q.cat === "procs"), cnt = {};
+  pool.forEach(q => { const k = procOf(q); cnt[k] = (cnt[k] || 0) + 1; });
+  const ps = state.procStats || {};
+  const sub = id => {
+    const n = cnt[id] || 0, s = ps[id];
+    return n + " " + t("вопросов") + (s && s.total ? " · ✓ " + Math.round(s.correct / s.total * 100) + "%" : "");
+  };
+  app.innerHTML = `${topbar("Проверка процессов")}
+    <div class="lesslist">
+      <button class="lesscard" onclick="startProc('')"><span class="lessico">🎲</span><span class="lessmeta"><b>${t("Смешанный тест")}</b><small>${Math.min(20, pool.length)} ${t("вопросов")} · ${t("из всех процессов")}</small></span><span class="lessplay">▶</span></button>
+      ${PROCS.filter(p => cnt[p[0]]).map(p => `<button class="lesscard" onclick="startProc('${p[0]}')"><span class="lessico">${p[1]}</span><span class="lessmeta"><b>${p[0]} · ${t(p[2])}</b><small>${sub(p[0])}</small></span><span class="lessplay">▶</span></button>`).join("")}
+    </div>
+    <button class="ghost fullrow" onclick="renderHome()">${t("В меню")}</button>`;
+}
+function startProc(id) {
+  const pool = (DATA.quiz || []).filter(q => q.cat === "procs");
+  if (!id) return startQuiz(pick(pool, 20), t("Смешанный тест"), "procs");
+  const p = PROCS.filter(x => x[0] === id)[0];
+  startQuiz(shuffle(pool.filter(q => procOf(q) === id)), id + " · " + t(p ? p[2] : ""), "procs");
 }
 
 function closedPool(list) { return list.filter(q => q.type !== "open"); }   // открытые вопросы — не для блица/аттестации
@@ -427,6 +471,7 @@ function route(go) {
   if (go.startsWith("quiz-")) {
     const cat = go.slice(5);
     if (window.AvSecLic && AvSecLic.locked(cat)) return renderUnlock();
+    if (cat === "procs") return renderProcs();
     return startQuiz(shuffle(trimPool(DATA.quiz.filter(q => q.cat === cat))), CAT_NAMES[cat] || "Тест", cat);
   }
 }
