@@ -10,7 +10,7 @@
   var ENC_URL = "./data.full.enc";
   /* Версия полной базы. ПОДНИМАТЬ при каждой пересборке data.full.enc: у кого в кэше база
      другой версии, приложение само тихо перекачает её (по сохранённому коду, раз за релиз). */
-  var BANK_VER = "2026-11-02-procs";
+  var BANK_VER = "2026-11-16-key2";   // 2026-11-16: смена ключа полной базы (содержание то же)
 
   function b64ToBytes(b64) { var s = atob(b64), a = new Uint8Array(s.length); for (var i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
 
@@ -54,7 +54,7 @@
       .then(function (res) {
         if (!res || !res.ok) throw { soft: true, error: (res && res.error) || "invalid", expires: res && res.expires };
         meta = res;
-        return fetch(ENC_URL).then(function (r) { return r.text(); });
+        return fetch(ENC_URL + "?v=" + BANK_VER).then(function (r) { return r.text(); });
       })
       .then(function (encB64) { return decryptFull(encB64, meta.key); })
       .then(function (obj) {

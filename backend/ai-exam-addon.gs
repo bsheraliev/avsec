@@ -41,8 +41,25 @@ var GROQ_MODEL   = "openai/gpt-oss-120b";   // ИИ-оценка: текст (б
 var GEMINI_MODEL = "gemini-flash-latest";   // резерв ИИ-оценки
 
 /* ---------- Открытые вопросы: ИИ-оценка (Groq основной, Gemini резерв) ---------- */
+/* Ограничение частоты ИИ-проверки (гейт SECURITY-PRELAUNCH, 2026-11-16): не больше GRADE_PER_HOUR
+   запросов в час на весь сервер — бесплатный лимит Groq/Gemini не выбрать чужими запросами.
+   Сверх лимита клиент получает {error:"rate"} и проверяет ответ сам (локальная проверка). */
+var GRADE_PER_HOUR = 300;
+function gradeRateOk_() {
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(3000); } catch (e) { return true; }
+  try {
+    var cache = CacheService.getScriptCache(), k = "rl_grade_" + Math.floor(Date.now() / 3600000);
+    var n = Number(cache.get(k) || 0) + 1;
+    cache.put(k, String(n), 3700);
+    return n <= GRADE_PER_HOUR;
+  } finally { lock.releaseLock(); }
+}
+
 function grade_(b) {
   if (!b.q || !b.answer) return { error: "no question/answer" };
+  if (String(b.answer).length > 3000 || String(b.q).length > 3000) return { error: "too long" };   // клиент проверит сам
+  if (!gradeRateOk_()) return { error: "rate" };                                                   // клиент проверит сам
   var crit = (b.crit || []).map(function (c, i) { return (i + 1) + ") " + c; }).join("; ");
   var prompt =
     "Ты — строгий, но справедливый экзаменатор. Предмет: " + (b.subject || "авиация") + ".\n" +
